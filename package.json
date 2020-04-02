@@ -1,0 +1,52 @@
+{
+  "name": "simplemirror",
+  "version": "1.0.0",
+  "main": "dist/SimpleMirror.cjs.js",
+  "module": "dist/SimpleMirror.esm.js",
+  "browser": "dist/SimpleMirror.umd.js",
+  "dependencies": {
+    "prosemirror-commands": "^1.1.2",
+    "prosemirror-dropcursor": "^1.3.2",
+    "prosemirror-gapcursor": "^1.1.2",
+    "prosemirror-history": "^1.1.3",
+    "prosemirror-inputrules": "^1.1.2",
+    "prosemirror-keymap": "^1.1.3",
+    "prosemirror-markdown": "^1.4.4",
+    "prosemirror-model": "^1.8.2",
+    "prosemirror-schema-basic": "^1.1.2",
+    "prosemirror-schema-list": "^1.1.2",
+    "prosemirror-state": "^1.3.2",
+    "prosemirror-tables": "^1.0.0",
+    "prosemirror-utils": "^0.9.6",
+    "prosemirror-view": "^1.13.7"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-class-properties": "^7.8.3",
+    "@babel/preset-env": "^7.9.0",
+    "@rollup/plugin-node-resolve": "7.1.1",
+    "babel-eslint": "^10.1.0",
+    "eslint": "^6.8.0",
+    "eslint-config-standard": "^14.1.1",
+    "eslint-plugin-import": "^2.20.2",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "npm-run-all": "^4.1.5",
+    "prettier": "2.0.2",
+    "rollup": "^1.29.0",
+    "rollup-plugin-babel": "^4.4.0",
+    "rollup-plugin-postcss": "^2.5.0",
+    "serve": "^11.0.2",
+    "stylelint": "^13.3.0",
+    "stylelint-config-standard": "^20.0.0"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w -m",
+    "dev": "npm-run-all --parallel start watch",
+    "start": "serve dist"
+  },
+  "files": [
+    "dist"
+  ]
+}
