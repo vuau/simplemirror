@@ -1,6 +1,11 @@
 {
   "name": "simplemirror",
   "version": "1.0.0",
+  "description": "A simple and easy to use WYSIWYWG editor based on ProseMirror",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phamvuau/simplemirror.git"
+  },
   "main": "dist/SimpleMirror.cjs.js",
   "module": "dist/SimpleMirror.esm.js",
   "browser": "dist/SimpleMirror.umd.js",
