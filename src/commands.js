@@ -53,6 +53,16 @@ const handleEnter = (state, dispatch, view) => {
   if (command) return command(state, dispatch, view)
   return false
 }
+export const createHardBreak = (state, dispatch, view) => {
+  if (dispatch) {
+    dispatch(
+      state.tr
+        .replaceSelectionWith(schema.nodes.hard_break.create())
+        .scrollIntoView()
+    )
+  }
+  return true
+}
 
 export default [
   {
@@ -120,7 +130,11 @@ export default [
   },
   {
     command: handleEnter,
-    shortcuts: ['Enter', 'Mod-Enter']
+    shortcuts: ['Enter']
+  },
+  {
+    command: createHardBreak,
+    shortcuts: ['Shift-Enter', 'Mod-Enter', 'Ctrl-Enter']
   },
   {
     command: exitCode,
