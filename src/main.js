@@ -18,24 +18,17 @@ class SimpleMirror {
       throw new Error('you need to specify a selector to init SimpleMirror')
     }
 
-    this.editorDOM = document.querySelector(selector)
-    this.editor = new EditorView(this.editorDOM, {
+    this.view = new EditorView(document.querySelector(selector), {
       dispatchTransaction: this.dispatchTransaction,
       state: this.createState(value)
     })
 
-    this.prosemirrorDOM = this.editorDOM.querySelector('.ProseMirror')
-    this.prosemirrorDOM.addEventListener('scroll', this.saveLastScroll)
-
     this.onChange = onChange
-
-    document.execCommand('enableObjectResizing', false, false)
-    document.execCommand('enableInlineTableEditing', false, false)
   }
 
   dispatchTransaction = (tr) => {
-    const nextState = this.editor.state.apply(tr)
-    this.editor.updateState(nextState)
+    const nextState = this.view.state.apply(tr)
+    this.view.updateState(nextState)
     if (tr.docChanged) {
       const fragment = DOMSerializer.fromSchema(schema).serializeFragment(
         tr.doc.content
@@ -44,10 +37,6 @@ class SimpleMirror {
       tmp.appendChild(fragment)
       this.onChange(tmp.innerHTML)
     }
-  }
-
-  saveLastScroll = () => {
-    this.lastScrollPosition = this.prosemirrorDOM.scrollTop
   }
 
   createState = value => {
@@ -65,13 +54,8 @@ class SimpleMirror {
     return state
   }
 
-  update = () => {
-    this.prosemirrorDOM.scrollTop = this.lastScrollPosition
-  }
-
   remove = () => {
-    this.prosemirrorDOM.removeEventListener('scroll', this.saveLastScroll)
-    this.editor.destroy()
+    this.view.destroy()
   }
 }
 

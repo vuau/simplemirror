@@ -18058,9 +18058,9 @@
     _classCallCheck(this, SimpleMirror);
 
     _defineProperty(this, "dispatchTransaction", function (tr) {
-      var nextState = _this.editor.state.apply(tr);
+      var nextState = _this.view.state.apply(tr);
 
-      _this.editor.updateState(nextState);
+      _this.view.updateState(nextState);
 
       if (tr.docChanged) {
         var fragment = DOMSerializer.fromSchema(schema$1).serializeFragment(tr.doc.content);
@@ -18069,10 +18069,6 @@
 
         _this.onChange(tmp.innerHTML);
       }
-    });
-
-    _defineProperty(this, "saveLastScroll", function () {
-      _this.lastScrollPosition = _this.prosemirrorDOM.scrollTop;
     });
 
     _defineProperty(this, "createState", function (value) {
@@ -18085,14 +18081,8 @@
       return state;
     });
 
-    _defineProperty(this, "update", function () {
-      _this.prosemirrorDOM.scrollTop = _this.lastScrollPosition;
-    });
-
     _defineProperty(this, "remove", function () {
-      _this.prosemirrorDOM.removeEventListener('scroll', _this.saveLastScroll);
-
-      _this.editor.destroy();
+      _this.view.destroy();
     });
 
     var selector = config.selector,
@@ -18103,16 +18093,11 @@
       throw new Error('you need to specify a selector to init SimpleMirror');
     }
 
-    this.editorDOM = document.querySelector(selector);
-    this.editor = new EditorView(this.editorDOM, {
+    this.view = new EditorView(document.querySelector(selector), {
       dispatchTransaction: this.dispatchTransaction,
       state: this.createState(_value)
     });
-    this.prosemirrorDOM = this.editorDOM.querySelector('.ProseMirror');
-    this.prosemirrorDOM.addEventListener('scroll', this.saveLastScroll);
     this.onChange = onChange;
-    document.execCommand('enableObjectResizing', false, false);
-    document.execCommand('enableInlineTableEditing', false, false);
   };
 
   return SimpleMirror;
