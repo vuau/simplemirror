@@ -17879,6 +17879,13 @@ var handleEnter = function handleEnter(state, dispatch, view) {
   return false;
 };
 
+var createHardBreak = function createHardBreak(state, dispatch, view) {
+  if (dispatch) {
+    dispatch(state.tr.replaceSelectionWith(schema$1.nodes.hard_break.create()).scrollIntoView());
+  }
+
+  return true;
+};
 var commands = [{
   command: undo,
   shortcuts: ['Mod-z'],
@@ -17937,7 +17944,10 @@ var commands = [{
   className: 'fas fa-quote-left'
 }, {
   command: handleEnter,
-  shortcuts: ['Enter', 'Mod-Enter']
+  shortcuts: ['Enter']
+}, {
+  command: createHardBreak,
+  shortcuts: ['Shift-Enter', 'Mod-Enter', 'Ctrl-Enter']
 }, {
   command: exitCode,
   shortcuts: ['Shift-Enter']
