@@ -4,29 +4,33 @@ import { EditorView } from 'prosemirror-view'
 import { history } from 'prosemirror-history'
 
 import schema from './schema'
-import keymaps from './keymaps'
-import menu from './menu'
+import { createKeymaps } from './keymaps'
+import { createMenu } from './menu'
+import { fillCommand } from './utils'
+import builtInCommands from './commands'
 
 import 'prosemirror-view/style/prosemirror.css'
 import './main.css'
 
 class SimpleMirror {
-  constructor (config) {
-    const { selector, value, onChange } = config
-
+  constructor ({ selector, value, onChange, commands }) {
     if (!selector) {
       throw new Error('you need to specify a selector to init SimpleMirror')
     }
 
+    this.commands = commands
+      ? Object.values(fillCommand(commands, builtInCommands))
+      : Object.values(builtInCommands)
+    this.onChange = onChange
+    this.menuPlugin = createMenu(this.commands)
+    this.keymapPlugin = createKeymaps(this.commands)
     this.view = new EditorView(document.querySelector(selector), {
-      dispatchTransaction: this.dispatchTransaction,
+      dispatchTransaction: this.dispatchTransaction.bind(this),
       state: this.createState(value)
     })
-
-    this.onChange = onChange
   }
 
-  dispatchTransaction = (tr) => {
+  dispatchTransaction (tr) {
     const nextState = this.view.state.apply(tr)
     this.view.updateState(nextState)
     if (tr.docChanged) {
@@ -39,22 +43,18 @@ class SimpleMirror {
     }
   }
 
-  createState = value => {
+  createState (value) {
     const node = document.createElement('div')
     node.innerHTML = value
 
     const state = EditorState.create({
       doc: DOMParser.fromSchema(schema).parse(node),
-      plugins: [
-        menu,
-        keymaps,
-        history()
-      ]
+      plugins: [this.menuPlugin, this.keymapPlugin, history()]
     })
     return state
   }
 
-  remove = () => {
+  remove () {
     this.view.destroy()
   }
 }
