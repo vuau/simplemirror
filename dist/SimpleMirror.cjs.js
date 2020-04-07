@@ -18078,11 +18078,11 @@ var builtInCommands = {
   },
   break: {
     command: createHardBreak,
-    shortcuts: ['Shift-Enter', 'Mod-Enter', 'Ctrl-Enter']
+    shortcuts: ['Shift-Enter', 'Ctrl-Enter']
   },
   exit: {
     command: exitCode,
-    shortcuts: ['Shift-Enter']
+    shortcuts: ['Mod-Enter']
   },
   backspace: {
     command: backspace$1,
