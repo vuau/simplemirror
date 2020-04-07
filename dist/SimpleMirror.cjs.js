@@ -17065,6 +17065,115 @@ function keydownHandler(bindings) {
   };
 }
 
+function createKeymaps(customCommands) {
+  return keymap(customCommands.filter(function (c) {
+    return c.command && c.shortcuts;
+  }).reduce(function (mappedCommands, c) {
+    return _objectSpread2({}, mappedCommands, {}, c.shortcuts.reduce(function (mappedShortcut, shortcut) {
+      return _objectSpread2({}, mappedShortcut, _defineProperty({}, shortcut, c.command));
+    }, {}));
+  }, {}));
+}
+
+var MenuView = /*#__PURE__*/function () {
+  function MenuView(items, editorView) {
+    var _this = this;
+
+    _classCallCheck(this, MenuView);
+
+    _defineProperty(this, "createItem", function (_ref) {
+      var text = _ref.text,
+          className = _ref.className,
+          command = _ref.command;
+      var span = document.createElement('span');
+      span.className = 'menuitem ' + className;
+      span.title = text;
+      span.textContent = text;
+      span.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+
+        _this.editorView.focus();
+
+        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
+      });
+
+      var checkActive = function checkActive() {
+        var active = command(_this.editorView.state);
+        span.style.display = active ? '' : 'none';
+      };
+
+      _this.dom.appendChild(span);
+
+      return {
+        dom: span,
+        checkActive: checkActive
+      };
+    });
+
+    this.editorView = editorView;
+    this.dom = document.createElement('div');
+    this.dom.className = 'menubar';
+    this.items = items.map(function (_ref2) {
+      var command = _ref2.command,
+          text = _ref2.text,
+          className = _ref2.className;
+
+      if (text || className) {
+        return _this.createItem({
+          command: command,
+          text: text,
+          className: className
+        });
+      }
+
+      return null;
+    }).filter(function (item) {
+      return item;
+    });
+    this.update();
+  }
+
+  _createClass(MenuView, [{
+    key: "update",
+    value: function update() {
+      this.items.forEach(function (_ref3) {
+        var checkActive = _ref3.checkActive;
+        checkActive();
+      });
+    }
+  }, {
+    key: "destroy",
+    value: function destroy() {
+      this.dom.remove();
+    }
+  }]);
+
+  return MenuView;
+}();
+
+function createMenu(customCommands) {
+  return new Plugin({
+    view: function view(editorView) {
+      var menuView = new MenuView(customCommands, editorView);
+      editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom);
+      return menuView;
+    }
+  });
+}
+
+var fillCommand = function fillCommand(obj1, obj2) {
+  var merged = {};
+
+  for (var key in obj1) {
+    merged[key] = _objectSpread2({}, obj1[key], {
+      command: obj2[key].command
+    });
+  }
+
+  console.log('merged', merged);
+  return merged;
+};
+
 // Delete the selection, if there is one.
 
 function deleteSelection(state, dispatch) {
@@ -17879,232 +17988,172 @@ var handleEnter = function handleEnter(state, dispatch, view) {
   return false;
 };
 
-var createHardBreak = function createHardBreak(state, dispatch, view) {
+var createHardBreak = function createHardBreak(state, dispatch) {
   if (dispatch) {
     dispatch(state.tr.replaceSelectionWith(schema$1.nodes.hard_break.create()).scrollIntoView());
   }
 
   return true;
 };
-var commands = [{
-  command: undo,
-  shortcuts: ['Mod-z'],
-  className: 'fas fa-undo'
-}, {
-  command: redo,
-  shortcuts: ['Shift-Mod-Z'],
-  className: 'fas fa-redo'
-}, {
-  command: toggleMark(schema$1.marks.strong),
-  className: 'fas fa-bold',
-  shortcuts: ['Mod-b', 'Mod-B']
-}, {
-  command: toggleMark(schema$1.marks.strikethrough),
-  className: 'fas fa-strikethrough',
-  shortcuts: ['Mod-s', 'Mod-S']
-}, {
-  command: setBlockType(schema$1.nodes.heading, {
-    level: 2
-  }),
-  text: 'H2',
-  className: 'avenir'
-}, {
-  command: setBlockType(schema$1.nodes.heading, {
-    level: 3
-  }),
-  text: 'H3',
-  className: 'avenir'
-}, {
-  command: setBlockType(schema$1.nodes.heading, {
-    level: 4
-  }),
-  text: 'H4',
-  className: 'avenir'
-}, {
-  command: toggleMark(schema$1.marks.em),
-  mark: schema$1.marks.em,
-  className: 'fas fa-italic',
-  shortcuts: ['Mod-i', 'Mod-I']
-}, {
-  command: wrapInList(schema$1.nodes.ordered_list),
-  className: 'fas fa-list-ol'
-}, {
-  command: wrapInList(schema$1.nodes.bullet_list),
-  className: 'fas fa-list-ul'
-}, {
-  command: chainCommands(sinkListItem(schema$1.nodes.list_item), joinUp),
-  className: 'fas fa-indent',
-  shortcuts: ['Tab']
-}, {
-  command: chainCommands(liftListItem(schema$1.nodes.list_item), lift),
-  className: 'fas fa-outdent',
-  shortcuts: ['Shift-Tab']
-}, {
-  command: wrapIn(schema$1.nodes.blockquote),
-  className: 'fas fa-quote-left'
-}, {
-  command: handleEnter,
-  shortcuts: ['Enter']
-}, {
-  command: createHardBreak,
-  shortcuts: ['Shift-Enter', 'Mod-Enter', 'Ctrl-Enter']
-}, {
-  command: exitCode,
-  shortcuts: ['Shift-Enter']
-}, {
-  command: backspace$1,
-  shortcuts: ['Backspace', 'Mod-Backspace']
-}, {
-  command: del$1,
-  shortcuts: ['Delete', 'Mod-Delete']
-}, {
-  command: selectAll,
-  shortcuts: ['Mod-a']
-}];
+var builtInCommands = {
+  undo: {
+    command: undo,
+    shortcuts: ['Mod-z'],
+    className: 'fas fa-undo'
+  },
+  redo: {
+    command: redo,
+    shortcuts: ['Shift-Mod-Z'],
+    className: 'fas fa-redo'
+  },
+  bold: {
+    command: toggleMark(schema$1.marks.strong),
+    className: 'fas fa-bold',
+    shortcuts: ['Mod-b', 'Mod-B']
+  },
+  italic: {
+    command: toggleMark(schema$1.marks.em),
+    mark: schema$1.marks.em,
+    className: 'fas fa-italic',
+    shortcuts: ['Mod-i', 'Mod-I']
+  },
+  strikethrough: {
+    command: toggleMark(schema$1.marks.strikethrough),
+    className: 'fas fa-strikethrough',
+    shortcuts: ['Mod-s', 'Mod-S']
+  },
+  h1: {
+    command: setBlockType(schema$1.nodes.heading, {
+      level: 1
+    }),
+    text: 'H1',
+    className: 'avenir'
+  },
+  h2: {
+    command: setBlockType(schema$1.nodes.heading, {
+      level: 2
+    }),
+    text: 'H2',
+    className: 'avenir'
+  },
+  h3: {
+    command: setBlockType(schema$1.nodes.heading, {
+      level: 3
+    }),
+    text: 'H3',
+    className: 'avenir'
+  },
+  h4: {
+    command: setBlockType(schema$1.nodes.heading, {
+      level: 4
+    }),
+    text: 'H4',
+    className: 'avenir'
+  },
+  orderedList: {
+    command: wrapInList(schema$1.nodes.ordered_list),
+    className: 'fas fa-list-ol'
+  },
+  unorderedList: {
+    command: wrapInList(schema$1.nodes.bullet_list),
+    className: 'fas fa-list-ul'
+  },
+  indent: {
+    command: chainCommands(sinkListItem(schema$1.nodes.list_item), joinUp),
+    className: 'fas fa-indent',
+    shortcuts: ['Tab']
+  },
+  outdent: {
+    command: chainCommands(liftListItem(schema$1.nodes.list_item), lift),
+    className: 'fas fa-outdent',
+    shortcuts: ['Shift-Tab']
+  },
+  quote: {
+    command: wrapIn(schema$1.nodes.blockquote),
+    className: 'fas fa-quote-left'
+  },
+  enter: {
+    command: handleEnter,
+    shortcuts: ['Enter']
+  },
+  break: {
+    command: createHardBreak,
+    shortcuts: ['Shift-Enter', 'Mod-Enter', 'Ctrl-Enter']
+  },
+  exit: {
+    command: exitCode,
+    shortcuts: ['Shift-Enter']
+  },
+  backspace: {
+    command: backspace$1,
+    shortcuts: ['Backspace', 'Mod-Backspace']
+  },
+  delete: {
+    command: del$1,
+    shortcuts: ['Delete', 'Mod-Delete']
+  },
+  selectAll: {
+    command: selectAll,
+    shortcuts: ['Mod-a']
+  }
+};
 
-var keymaps = keymap(commands.filter(function (c) {
-  return c.command && c.shortcuts;
-}).reduce(function (mappedCommands, c) {
-  return _objectSpread2({}, mappedCommands, {}, c.shortcuts.reduce(function (mappedShortcut, shortcut) {
-    return _objectSpread2({}, mappedShortcut, _defineProperty({}, shortcut, c.command));
-  }, {}));
-}, {}));
+var SimpleMirror = /*#__PURE__*/function () {
+  function SimpleMirror(_ref) {
+    var selector = _ref.selector,
+        value = _ref.value,
+        onChange = _ref.onChange,
+        commands = _ref.commands;
 
-var MenuView = /*#__PURE__*/function () {
-  function MenuView(commands, editorView) {
-    var _this = this;
+    _classCallCheck(this, SimpleMirror);
 
-    _classCallCheck(this, MenuView);
+    if (!selector) {
+      throw new Error('you need to specify a selector to init SimpleMirror');
+    }
 
-    _defineProperty(this, "createItem", function (_ref) {
-      var text = _ref.text,
-          className = _ref.className,
-          command = _ref.command;
-      var span = document.createElement('span');
-      span.className = 'menuitem ' + className;
-      span.title = text;
-      span.textContent = text;
-      span.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-
-        _this.editorView.focus();
-
-        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
-      });
-
-      var checkActive = function checkActive() {
-        var active = command(_this.editorView.state);
-        span.style.display = active ? '' : 'none';
-      };
-
-      _this.dom.appendChild(span);
-
-      return {
-        dom: span,
-        checkActive: checkActive
-      };
+    this.commands = commands ? Object.values(fillCommand(commands, builtInCommands)) : Object.values(builtInCommands);
+    this.onChange = onChange;
+    this.menuPlugin = createMenu(this.commands);
+    this.keymapPlugin = createKeymaps(this.commands);
+    this.view = new EditorView(document.querySelector(selector), {
+      dispatchTransaction: this.dispatchTransaction.bind(this),
+      state: this.createState(value)
     });
-
-    this.editorView = editorView;
-    this.dom = document.createElement('div');
-    this.dom.className = 'menubar';
-    this.items = commands.map(function (_ref2) {
-      var command = _ref2.command,
-          text = _ref2.text,
-          className = _ref2.className;
-
-      if (text || className) {
-        return _this.createItem({
-          command: command,
-          text: text,
-          className: className
-        });
-      }
-
-      return null;
-    }).filter(function (item) {
-      return item;
-    });
-    this.update();
   }
 
-  _createClass(MenuView, [{
-    key: "update",
-    value: function update() {
-      this.items.forEach(function (_ref3) {
-        var checkActive = _ref3.checkActive;
-        checkActive();
-      });
+  _createClass(SimpleMirror, [{
+    key: "dispatchTransaction",
+    value: function dispatchTransaction(tr) {
+      var nextState = this.view.state.apply(tr);
+      this.view.updateState(nextState);
+
+      if (tr.docChanged) {
+        var fragment = DOMSerializer.fromSchema(schema$1).serializeFragment(tr.doc.content);
+        var tmp = document.createElement('div');
+        tmp.appendChild(fragment);
+        this.onChange(tmp.innerHTML);
+      }
     }
   }, {
-    key: "destroy",
-    value: function destroy() {
-      this.dom.remove();
+    key: "createState",
+    value: function createState(value) {
+      var node = document.createElement('div');
+      node.innerHTML = value;
+      var state = EditorState.create({
+        doc: DOMParser.fromSchema(schema$1).parse(node),
+        plugins: [this.menuPlugin, this.keymapPlugin, history()]
+      });
+      return state;
+    }
+  }, {
+    key: "remove",
+    value: function remove() {
+      this.view.destroy();
     }
   }]);
 
-  return MenuView;
+  return SimpleMirror;
 }();
-
-function createMenuPlugin() {
-  return new Plugin({
-    view: function view(editorView) {
-      var menuView = new MenuView(commands, editorView);
-      editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom);
-      return menuView;
-    }
-  });
-}
-
-var menu = createMenuPlugin();
-
-var SimpleMirror = function SimpleMirror(config) {
-  var _this = this;
-
-  _classCallCheck(this, SimpleMirror);
-
-  _defineProperty(this, "dispatchTransaction", function (tr) {
-    var nextState = _this.view.state.apply(tr);
-
-    _this.view.updateState(nextState);
-
-    if (tr.docChanged) {
-      var fragment = DOMSerializer.fromSchema(schema$1).serializeFragment(tr.doc.content);
-      var tmp = document.createElement('div');
-      tmp.appendChild(fragment);
-
-      _this.onChange(tmp.innerHTML);
-    }
-  });
-
-  _defineProperty(this, "createState", function (value) {
-    var node = document.createElement('div');
-    node.innerHTML = value;
-    var state = EditorState.create({
-      doc: DOMParser.fromSchema(schema$1).parse(node),
-      plugins: [menu, keymaps, history()]
-    });
-    return state;
-  });
-
-  _defineProperty(this, "remove", function () {
-    _this.view.destroy();
-  });
-
-  var selector = config.selector,
-      _value = config.value,
-      onChange = config.onChange;
-
-  if (!selector) {
-    throw new Error('you need to specify a selector to init SimpleMirror');
-  }
-
-  this.view = new EditorView(document.querySelector(selector), {
-    dispatchTransaction: this.dispatchTransaction,
-    state: this.createState(_value)
-  });
-  this.onChange = onChange;
-};
 
 module.exports = SimpleMirror;
 //# sourceMappingURL=SimpleMirror.cjs.js.map
