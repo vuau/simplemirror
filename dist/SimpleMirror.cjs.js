@@ -16768,14 +16768,16 @@ var strikethrough = {
   parseDOM: [{
     tag: 'strike'
   }, {
+    tag: 'del'
+  }, {
+    tag: 's'
+  }, {
     style: 'text-decoration:line-through'
   }, {
     style: 'text-decoration-line:line-through'
   }],
   toDOM: function toDOM() {
-    return ['span', {
-      style: 'text-decoration-line:line-through'
-    }];
+    return ['s'];
   }
 };
 var schema$1 = new Schema({
