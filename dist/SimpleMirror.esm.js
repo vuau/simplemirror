@@ -16783,395 +16783,6 @@ var schema$1 = new Schema({
   })
 });
 
-var base = {
-  8: "Backspace",
-  9: "Tab",
-  10: "Enter",
-  12: "NumLock",
-  13: "Enter",
-  16: "Shift",
-  17: "Control",
-  18: "Alt",
-  20: "CapsLock",
-  27: "Escape",
-  32: " ",
-  33: "PageUp",
-  34: "PageDown",
-  35: "End",
-  36: "Home",
-  37: "ArrowLeft",
-  38: "ArrowUp",
-  39: "ArrowRight",
-  40: "ArrowDown",
-  44: "PrintScreen",
-  45: "Insert",
-  46: "Delete",
-  59: ";",
-  61: "=",
-  91: "Meta",
-  92: "Meta",
-  106: "*",
-  107: "+",
-  108: ",",
-  109: "-",
-  110: ".",
-  111: "/",
-  144: "NumLock",
-  145: "ScrollLock",
-  160: "Shift",
-  161: "Shift",
-  162: "Control",
-  163: "Control",
-  164: "Alt",
-  165: "Alt",
-  173: "-",
-  186: ";",
-  187: "=",
-  188: ",",
-  189: "-",
-  190: ".",
-  191: "/",
-  192: "`",
-  219: "[",
-  220: "\\",
-  221: "]",
-  222: "'",
-  229: "q"
-};
-var shift = {
-  48: ")",
-  49: "!",
-  50: "@",
-  51: "#",
-  52: "$",
-  53: "%",
-  54: "^",
-  55: "&",
-  56: "*",
-  57: "(",
-  59: ":",
-  61: "+",
-  173: "_",
-  186: ":",
-  187: "+",
-  188: "<",
-  189: "_",
-  190: ">",
-  191: "?",
-  192: "~",
-  219: "{",
-  220: "|",
-  221: "}",
-  222: "\"",
-  229: "Q"
-};
-var chrome$1 = typeof navigator != "undefined" && /Chrome\/(\d+)/.exec(navigator.userAgent);
-var safari = typeof navigator != "undefined" && /Apple Computer/.test(navigator.vendor);
-var gecko = typeof navigator != "undefined" && /Gecko\/\d+/.test(navigator.userAgent);
-var mac = typeof navigator != "undefined" && /Mac/.test(navigator.platform);
-var ie$1 = typeof navigator != "undefined" && /MSIE \d|Trident\/(?:[7-9]|\d{2,})\..*rv:(\d+)/.exec(navigator.userAgent);
-var brokenModifierNames = chrome$1 && (mac || +chrome$1[1] < 57) || gecko && mac; // Fill in the digit keys
-
-for (var i = 0; i < 10; i++) {
-  base[48 + i] = base[96 + i] = String(i);
-} // The function keys
-
-
-for (var i = 1; i <= 24; i++) {
-  base[i + 111] = "F" + i;
-} // And the alphabetic keys
-
-
-for (var i = 65; i <= 90; i++) {
-  base[i] = String.fromCharCode(i + 32);
-  shift[i] = String.fromCharCode(i);
-} // For each code that doesn't have a shift-equivalent, copy the base name
-
-
-for (var code in base) {
-  if (!shift.hasOwnProperty(code)) shift[code] = base[code];
-}
-
-function keyName(event) {
-  // Don't trust event.key in Chrome when there are modifiers until
-  // they fix https://bugs.chromium.org/p/chromium/issues/detail?id=633838
-  var ignoreKey = brokenModifierNames && (event.ctrlKey || event.altKey || event.metaKey) || (safari || ie$1) && event.shiftKey && event.key && event.key.length == 1;
-  var name = !ignoreKey && event.key || (event.shiftKey ? shift : base)[event.keyCode] || event.key || "Unidentified"; // Edge sometimes produces wrong names (Issue #3)
-
-  if (name == "Esc") name = "Escape";
-  if (name == "Del") name = "Delete"; // https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/8860571/
-
-  if (name == "Left") name = "ArrowLeft";
-  if (name == "Up") name = "ArrowUp";
-  if (name == "Right") name = "ArrowRight";
-  if (name == "Down") name = "ArrowDown";
-  return name;
-}
-
-var mac$1 = typeof navigator != "undefined" ? /Mac/.test(navigator.platform) : false;
-
-function normalizeKeyName(name) {
-  var parts = name.split(/-(?!$)/),
-      result = parts[parts.length - 1];
-
-  if (result == "Space") {
-    result = " ";
-  }
-
-  var alt, ctrl, shift, meta;
-
-  for (var i = 0; i < parts.length - 1; i++) {
-    var mod = parts[i];
-
-    if (/^(cmd|meta|m)$/i.test(mod)) {
-      meta = true;
-    } else if (/^a(lt)?$/i.test(mod)) {
-      alt = true;
-    } else if (/^(c|ctrl|control)$/i.test(mod)) {
-      ctrl = true;
-    } else if (/^s(hift)?$/i.test(mod)) {
-      shift = true;
-    } else if (/^mod$/i.test(mod)) {
-      if (mac$1) {
-        meta = true;
-      } else {
-        ctrl = true;
-      }
-    } else {
-      throw new Error("Unrecognized modifier name: " + mod);
-    }
-  }
-
-  if (alt) {
-    result = "Alt-" + result;
-  }
-
-  if (ctrl) {
-    result = "Ctrl-" + result;
-  }
-
-  if (meta) {
-    result = "Meta-" + result;
-  }
-
-  if (shift) {
-    result = "Shift-" + result;
-  }
-
-  return result;
-}
-
-function normalize(map) {
-  var copy = Object.create(null);
-
-  for (var prop in map) {
-    copy[normalizeKeyName(prop)] = map[prop];
-  }
-
-  return copy;
-}
-
-function modifiers(name, event, shift) {
-  if (event.altKey) {
-    name = "Alt-" + name;
-  }
-
-  if (event.ctrlKey) {
-    name = "Ctrl-" + name;
-  }
-
-  if (event.metaKey) {
-    name = "Meta-" + name;
-  }
-
-  if (shift !== false && event.shiftKey) {
-    name = "Shift-" + name;
-  }
-
-  return name;
-} // :: (Object) → Plugin
-// Create a keymap plugin for the given set of bindings.
-//
-// Bindings should map key names to [command](#commands)-style
-// functions, which will be called with `(EditorState, dispatch,
-// EditorView)` arguments, and should return true when they've handled
-// the key. Note that the view argument isn't part of the command
-// protocol, but can be used as an escape hatch if a binding needs to
-// directly interact with the UI.
-//
-// Key names may be strings like `"Shift-Ctrl-Enter"`—a key
-// identifier prefixed with zero or more modifiers. Key identifiers
-// are based on the strings that can appear in
-// [`KeyEvent.key`](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key).
-// Use lowercase letters to refer to letter keys (or uppercase letters
-// if you want shift to be held). You may use `"Space"` as an alias
-// for the `" "` name.
-//
-// Modifiers can be given in any order. `Shift-` (or `s-`), `Alt-` (or
-// `a-`), `Ctrl-` (or `c-` or `Control-`) and `Cmd-` (or `m-` or
-// `Meta-`) are recognized. For characters that are created by holding
-// shift, the `Shift-` prefix is implied, and should not be added
-// explicitly.
-//
-// You can use `Mod-` as a shorthand for `Cmd-` on Mac and `Ctrl-` on
-// other platforms.
-//
-// You can add multiple keymap plugins to an editor. The order in
-// which they appear determines their precedence (the ones early in
-// the array get to dispatch first).
-
-
-function keymap(bindings) {
-  return new Plugin({
-    props: {
-      handleKeyDown: keydownHandler(bindings)
-    }
-  });
-} // :: (Object) → (view: EditorView, event: dom.Event) → bool
-// Given a set of bindings (using the same format as
-// [`keymap`](#keymap.keymap), return a [keydown
-// handler](#view.EditorProps.handleKeyDown) that handles them.
-
-
-function keydownHandler(bindings) {
-  var map = normalize(bindings);
-  return function (view, event) {
-    var name = keyName(event),
-        isChar = name.length == 1 && name != " ",
-        baseName;
-    var direct = map[modifiers(name, event, !isChar)];
-
-    if (direct && direct(view.state, view.dispatch, view)) {
-      return true;
-    }
-
-    if (isChar && (event.shiftKey || event.altKey || event.metaKey) && (baseName = base[event.keyCode]) && baseName != name) {
-      var fromCode = map[modifiers(baseName, event, true)];
-
-      if (fromCode && fromCode(view.state, view.dispatch, view)) {
-        return true;
-      }
-    } else if (isChar && event.shiftKey) {
-      var withShift = map[modifiers(name, event, true)];
-
-      if (withShift && withShift(view.state, view.dispatch, view)) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-}
-
-function createKeymaps(customCommands) {
-  return keymap(customCommands.filter(function (c) {
-    return c.command && c.shortcuts;
-  }).reduce(function (mappedCommands, c) {
-    return _objectSpread2({}, mappedCommands, {}, c.shortcuts.reduce(function (mappedShortcut, shortcut) {
-      return _objectSpread2({}, mappedShortcut, _defineProperty({}, shortcut, c.command));
-    }, {}));
-  }, {}));
-}
-
-var MenuView = /*#__PURE__*/function () {
-  function MenuView(items, editorView) {
-    var _this = this;
-
-    _classCallCheck(this, MenuView);
-
-    _defineProperty(this, "createItem", function (_ref) {
-      var text = _ref.text,
-          className = _ref.className,
-          command = _ref.command;
-      var span = document.createElement('span');
-      span.className = 'menuitem ' + className;
-      span.title = text;
-      span.textContent = text;
-      span.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-
-        _this.editorView.focus();
-
-        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
-      });
-
-      var checkActive = function checkActive() {
-        var active = command(_this.editorView.state);
-        span.style.display = active ? '' : 'none';
-      };
-
-      _this.dom.appendChild(span);
-
-      return {
-        dom: span,
-        checkActive: checkActive
-      };
-    });
-
-    this.editorView = editorView;
-    this.dom = document.createElement('div');
-    this.dom.className = 'menubar';
-    this.items = items.map(function (_ref2) {
-      var command = _ref2.command,
-          text = _ref2.text,
-          className = _ref2.className;
-
-      if (text || className) {
-        return _this.createItem({
-          command: command,
-          text: text,
-          className: className
-        });
-      }
-
-      return null;
-    }).filter(function (item) {
-      return item;
-    });
-    this.update();
-  }
-
-  _createClass(MenuView, [{
-    key: "update",
-    value: function update() {
-      this.items.forEach(function (_ref3) {
-        var checkActive = _ref3.checkActive;
-        checkActive();
-      });
-    }
-  }, {
-    key: "destroy",
-    value: function destroy() {
-      this.dom.remove();
-    }
-  }]);
-
-  return MenuView;
-}();
-
-function createMenu(customCommands) {
-  return new Plugin({
-    view: function view(editorView) {
-      var menuView = new MenuView(customCommands, editorView);
-      editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom);
-      return menuView;
-    }
-  });
-}
-
-var fillCommand = function fillCommand(obj1, obj2) {
-  var merged = {};
-
-  for (var key in obj1) {
-    merged[key] = _objectSpread2({}, obj1[key], {
-      command: obj2[key].command
-    });
-  }
-
-  console.log('merged', merged);
-  return merged;
-};
-
 // Delete the selection, if there is one.
 
 function deleteSelection(state, dispatch) {
@@ -17950,7 +17561,227 @@ for (var key in pcBaseKeymap) {
 } // declare global: os, navigator
 
 
-var mac$2 = typeof navigator != "undefined" ? /Mac/.test(navigator.platform) : typeof os != "undefined" ? os.platform() == "darwin" : false; // :: Object
+var mac = typeof navigator != "undefined" ? /Mac/.test(navigator.platform) : typeof os != "undefined" ? os.platform() == "darwin" : false; // :: Object
+
+// that, when typed, causes something to happen. This might be
+// changing two dashes into an emdash, wrapping a paragraph starting
+// with `"> "` into a blockquote, or something entirely different.
+
+var InputRule = function InputRule(match, handler) {
+  this.match = match;
+  this.handler = typeof handler == "string" ? stringHandler(handler) : handler;
+};
+
+function stringHandler(string) {
+  return function (state, match, start, end) {
+    var insert = string;
+
+    if (match[1]) {
+      var offset = match[0].lastIndexOf(match[1]);
+      insert += match[0].slice(offset + match[1].length);
+      start += offset;
+      var cutOff = start - end;
+
+      if (cutOff > 0) {
+        insert = match[0].slice(offset - cutOff, offset) + insert;
+        start = end;
+      }
+    }
+
+    return state.tr.insertText(insert, start, end);
+  };
+}
+
+var MAX_MATCH = 500; // :: (config: {rules: [InputRule]}) → Plugin
+// Create an input rules plugin. When enabled, it will cause text
+// input that matches any of the given rules to trigger the rule's
+// action.
+
+function inputRules(ref) {
+  var rules = ref.rules;
+  var plugin = new Plugin({
+    state: {
+      init: function init() {
+        return null;
+      },
+      apply: function apply(tr, prev) {
+        var stored = tr.getMeta(this);
+
+        if (stored) {
+          return stored;
+        }
+
+        return tr.selectionSet || tr.docChanged ? null : prev;
+      }
+    },
+    props: {
+      handleTextInput: function handleTextInput(view, from, to, text) {
+        return run(view, from, to, text, rules, plugin);
+      },
+      handleDOMEvents: {
+        compositionend: function compositionend(view) {
+          setTimeout(function () {
+            var ref = view.state.selection;
+            var $cursor = ref.$cursor;
+
+            if ($cursor) {
+              run(view, $cursor.pos, $cursor.pos, "", rules, plugin);
+            }
+          });
+        }
+      }
+    },
+    isInputRules: true
+  });
+  return plugin;
+}
+
+function run(view, from, to, text, rules, plugin) {
+  if (view.composing) {
+    return false;
+  }
+
+  var state = view.state,
+      $from = state.doc.resolve(from);
+
+  if ($from.parent.type.spec.code) {
+    return false;
+  }
+
+  var textBefore = $from.parent.textBetween(Math.max(0, $from.parentOffset - MAX_MATCH), $from.parentOffset, null, "\uFFFC") + text;
+
+  for (var i = 0; i < rules.length; i++) {
+    var match = rules[i].match.exec(textBefore);
+    var tr = match && rules[i].handler(state, match, from - (match[0].length - text.length), to);
+
+    if (!tr) {
+      continue;
+    }
+
+    view.dispatch(tr.setMeta(plugin, {
+      transform: tr,
+      from: from,
+      to: to,
+      text: text
+    }));
+    return true;
+  }
+
+  return false;
+} // :: (EditorState, ?(Transaction)) → bool
+
+
+var emDash = new InputRule(/--$/, "—"); // :: InputRule Converts three dots to an ellipsis character.
+
+var ellipsis = new InputRule(/\.\.\.$/, "…"); // :: InputRule “Smart” opening double quotes.
+
+var openDoubleQuote = new InputRule(/(?:^|[\s\{\[\(\<'"\u2018\u201C])(")$/, "“"); // :: InputRule “Smart” closing double quotes.
+
+var closeDoubleQuote = new InputRule(/"$/, "”"); // :: InputRule “Smart” opening single quotes.
+
+var openSingleQuote = new InputRule(/(?:^|[\s\{\[\(\<'"\u2018\u201C])(')$/, "‘"); // :: InputRule “Smart” closing single quotes.
+
+var closeSingleQuote = new InputRule(/'$/, "’"); // :: [InputRule] Smart-quote related input rules.
+
+var smartQuotes = [openDoubleQuote, closeDoubleQuote, openSingleQuote, closeSingleQuote]; // :: (RegExp, NodeType, ?union<Object, ([string]) → ?Object>, ?([string], Node) → bool) → InputRule
+// Build an input rule for automatically wrapping a textblock when a
+// given string is typed. The `regexp` argument is
+// directly passed through to the `InputRule` constructor. You'll
+// probably want the regexp to start with `^`, so that the pattern can
+// only occur at the start of a textblock.
+//
+// `nodeType` is the type of node to wrap in. If it needs attributes,
+// you can either pass them directly, or pass a function that will
+// compute them from the regular expression match.
+//
+// By default, if there's a node with the same type above the newly
+// wrapped node, the rule will try to [join](#transform.Transform.join) those
+// two nodes. You can pass a join predicate, which takes a regular
+// expression match and the node before the wrapped node, and can
+// return a boolean to indicate whether a join should happen.
+
+function wrappingInputRule(regexp, nodeType, getAttrs, joinPredicate) {
+  return new InputRule(regexp, function (state, match, start, end) {
+    var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
+    var tr = state.tr.delete(start, end);
+    var $start = tr.doc.resolve(start),
+        range = $start.blockRange(),
+        wrapping = range && findWrapping(range, nodeType, attrs);
+
+    if (!wrapping) {
+      return null;
+    }
+
+    tr.wrap(range, wrapping);
+    var before = tr.doc.resolve(start - 1).nodeBefore;
+
+    if (before && before.type == nodeType && canJoin(tr.doc, start - 1) && (!joinPredicate || joinPredicate(match, before))) {
+      tr.join(start - 1);
+    }
+
+    return tr;
+  });
+} // :: (RegExp, NodeType, ?union<Object, ([string]) → ?Object>) → InputRule
+// Build an input rule that changes the type of a textblock when the
+// matched text is typed into it. You'll usually want to start your
+// regexp with `^` to that it is only matched at the start of a
+// textblock. The optional `getAttrs` parameter can be used to compute
+// the new node's attributes, and works the same as in the
+// `wrappingInputRule` function.
+
+
+function textblockTypeInputRule(regexp, nodeType, getAttrs) {
+  return new InputRule(regexp, function (state, match, start, end) {
+    var $start = state.doc.resolve(start);
+    var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
+
+    if (!$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), nodeType)) {
+      return null;
+    }
+
+    return state.tr.delete(start, end).setBlockType(start, start, nodeType, attrs);
+  });
+}
+
+// at the start of a textblock into a blockquote.
+
+var quoteRule = wrappingInputRule(/^\s*>\s$/, schema$1.nodes.blockquote); // Given a list node type, returns an input rule that turns a number
+// followed by a dot at the start of a textblock into an ordered list.
+
+var orderedListRule = wrappingInputRule(/^(\d+)\.\s$/, schema$1.nodes.ordered_list, function (match) {
+  return {
+    order: +match[1]
+  };
+}, function (match, node) {
+  return node.childCount + node.attrs.order === +match[1];
+}); // Given a list node type, returns an input rule that turns a bullet
+// (dash, plush, or asterisk) at the start of a textblock into a
+// bullet list.
+
+var unorderedListRule = wrappingInputRule(/^\s*([-+*])\s$/, schema$1.nodes.bullet_list); // Given a code block node type, returns an input rule that turns a
+// textblock starting with three backticks into a code block.
+
+var codeRule = textblockTypeInputRule(/^```$/, schema$1.nodes.code_block); // Given a node type and a maximum level, creates an input rule that
+// turns up to that number of `#` characters followed by a space at
+// the start of a textblock into a heading whose level corresponds to
+// the number of `#` signs.
+
+var headingRule = textblockTypeInputRule(new RegExp('^(#{1,' + 6 + '})\\s$'), schema$1.nodes.heading, function (match) {
+  return {
+    level: match[1].length
+  };
+});
+function createInputRules(customCommands) {
+  var customRules = customCommands.map(function (c) {
+    return c.inputRule;
+  }).filter(function (c) {
+    return c;
+  });
+  var rules = smartQuotes.concat.apply(smartQuotes, [ellipsis, emDash].concat([customRules]));
+  return inputRules({
+    rules: rules
+  });
+}
 
 var backspace$1 = chainCommands(deleteSelection, joinBackward, selectNodeBackward);
 var del$1 = chainCommands(deleteSelection, joinForward, selectNodeForward);
@@ -17960,6 +17791,8 @@ var createPragraph = function createPragraph(state, dispatch, view) {
   wrapIn(schema$1.nodes.paragraph)(state, dispatch, view);
   return true;
 };
+
+var createCodeBlock = setBlockType(schema$1.nodes.code_block);
 
 var handleEnter = function handleEnter(state, dispatch, view) {
   var $from = state.selection.$from;
@@ -18025,7 +17858,8 @@ var builtInCommands = {
       level: 1
     }),
     text: 'H1',
-    className: 'avenir'
+    className: 'avenir',
+    inputRule: headingRule
   },
   h2: {
     command: setBlockType(schema$1.nodes.heading, {
@@ -18038,8 +17872,7 @@ var builtInCommands = {
     command: setBlockType(schema$1.nodes.heading, {
       level: 3
     }),
-    text: 'H3',
-    className: 'avenir'
+    text: 'H3'
   },
   h4: {
     command: setBlockType(schema$1.nodes.heading, {
@@ -18050,11 +17883,13 @@ var builtInCommands = {
   },
   orderedList: {
     command: wrapInList(schema$1.nodes.ordered_list),
-    className: 'fas fa-list-ol'
+    className: 'fas fa-list-ol',
+    inputRule: orderedListRule
   },
   unorderedList: {
     command: wrapInList(schema$1.nodes.bullet_list),
-    className: 'fas fa-list-ul'
+    className: 'fas fa-list-ul',
+    inputRule: unorderedListRule
   },
   indent: {
     command: chainCommands(sinkListItem(schema$1.nodes.list_item), joinUp),
@@ -18068,7 +17903,13 @@ var builtInCommands = {
   },
   quote: {
     command: wrapIn(schema$1.nodes.blockquote),
-    className: 'fas fa-quote-left'
+    className: 'fas fa-quote-left',
+    inputRule: quoteRule
+  },
+  code: {
+    command: createCodeBlock,
+    className: 'fas fa-code',
+    inputRule: codeRule
   },
   enter: {
     command: handleEnter,
@@ -18096,6 +17937,395 @@ var builtInCommands = {
   }
 };
 
+var fillCommand = function fillCommand(obj1, obj2) {
+  var merged = {};
+
+  for (var key in obj1) {
+    merged[key] = _objectSpread2({}, obj1[key], {
+      command: obj2[key].command
+    });
+  }
+
+  console.log('merged', merged);
+  return merged;
+};
+
+var base = {
+  8: "Backspace",
+  9: "Tab",
+  10: "Enter",
+  12: "NumLock",
+  13: "Enter",
+  16: "Shift",
+  17: "Control",
+  18: "Alt",
+  20: "CapsLock",
+  27: "Escape",
+  32: " ",
+  33: "PageUp",
+  34: "PageDown",
+  35: "End",
+  36: "Home",
+  37: "ArrowLeft",
+  38: "ArrowUp",
+  39: "ArrowRight",
+  40: "ArrowDown",
+  44: "PrintScreen",
+  45: "Insert",
+  46: "Delete",
+  59: ";",
+  61: "=",
+  91: "Meta",
+  92: "Meta",
+  106: "*",
+  107: "+",
+  108: ",",
+  109: "-",
+  110: ".",
+  111: "/",
+  144: "NumLock",
+  145: "ScrollLock",
+  160: "Shift",
+  161: "Shift",
+  162: "Control",
+  163: "Control",
+  164: "Alt",
+  165: "Alt",
+  173: "-",
+  186: ";",
+  187: "=",
+  188: ",",
+  189: "-",
+  190: ".",
+  191: "/",
+  192: "`",
+  219: "[",
+  220: "\\",
+  221: "]",
+  222: "'",
+  229: "q"
+};
+var shift = {
+  48: ")",
+  49: "!",
+  50: "@",
+  51: "#",
+  52: "$",
+  53: "%",
+  54: "^",
+  55: "&",
+  56: "*",
+  57: "(",
+  59: ":",
+  61: "+",
+  173: "_",
+  186: ":",
+  187: "+",
+  188: "<",
+  189: "_",
+  190: ">",
+  191: "?",
+  192: "~",
+  219: "{",
+  220: "|",
+  221: "}",
+  222: "\"",
+  229: "Q"
+};
+var chrome$1 = typeof navigator != "undefined" && /Chrome\/(\d+)/.exec(navigator.userAgent);
+var safari = typeof navigator != "undefined" && /Apple Computer/.test(navigator.vendor);
+var gecko = typeof navigator != "undefined" && /Gecko\/\d+/.test(navigator.userAgent);
+var mac$1 = typeof navigator != "undefined" && /Mac/.test(navigator.platform);
+var ie$1 = typeof navigator != "undefined" && /MSIE \d|Trident\/(?:[7-9]|\d{2,})\..*rv:(\d+)/.exec(navigator.userAgent);
+var brokenModifierNames = chrome$1 && (mac$1 || +chrome$1[1] < 57) || gecko && mac$1; // Fill in the digit keys
+
+for (var i = 0; i < 10; i++) {
+  base[48 + i] = base[96 + i] = String(i);
+} // The function keys
+
+
+for (var i = 1; i <= 24; i++) {
+  base[i + 111] = "F" + i;
+} // And the alphabetic keys
+
+
+for (var i = 65; i <= 90; i++) {
+  base[i] = String.fromCharCode(i + 32);
+  shift[i] = String.fromCharCode(i);
+} // For each code that doesn't have a shift-equivalent, copy the base name
+
+
+for (var code in base) {
+  if (!shift.hasOwnProperty(code)) shift[code] = base[code];
+}
+
+function keyName(event) {
+  // Don't trust event.key in Chrome when there are modifiers until
+  // they fix https://bugs.chromium.org/p/chromium/issues/detail?id=633838
+  var ignoreKey = brokenModifierNames && (event.ctrlKey || event.altKey || event.metaKey) || (safari || ie$1) && event.shiftKey && event.key && event.key.length == 1;
+  var name = !ignoreKey && event.key || (event.shiftKey ? shift : base)[event.keyCode] || event.key || "Unidentified"; // Edge sometimes produces wrong names (Issue #3)
+
+  if (name == "Esc") name = "Escape";
+  if (name == "Del") name = "Delete"; // https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/8860571/
+
+  if (name == "Left") name = "ArrowLeft";
+  if (name == "Up") name = "ArrowUp";
+  if (name == "Right") name = "ArrowRight";
+  if (name == "Down") name = "ArrowDown";
+  return name;
+}
+
+var mac$2 = typeof navigator != "undefined" ? /Mac/.test(navigator.platform) : false;
+
+function normalizeKeyName(name) {
+  var parts = name.split(/-(?!$)/),
+      result = parts[parts.length - 1];
+
+  if (result == "Space") {
+    result = " ";
+  }
+
+  var alt, ctrl, shift, meta;
+
+  for (var i = 0; i < parts.length - 1; i++) {
+    var mod = parts[i];
+
+    if (/^(cmd|meta|m)$/i.test(mod)) {
+      meta = true;
+    } else if (/^a(lt)?$/i.test(mod)) {
+      alt = true;
+    } else if (/^(c|ctrl|control)$/i.test(mod)) {
+      ctrl = true;
+    } else if (/^s(hift)?$/i.test(mod)) {
+      shift = true;
+    } else if (/^mod$/i.test(mod)) {
+      if (mac$2) {
+        meta = true;
+      } else {
+        ctrl = true;
+      }
+    } else {
+      throw new Error("Unrecognized modifier name: " + mod);
+    }
+  }
+
+  if (alt) {
+    result = "Alt-" + result;
+  }
+
+  if (ctrl) {
+    result = "Ctrl-" + result;
+  }
+
+  if (meta) {
+    result = "Meta-" + result;
+  }
+
+  if (shift) {
+    result = "Shift-" + result;
+  }
+
+  return result;
+}
+
+function normalize(map) {
+  var copy = Object.create(null);
+
+  for (var prop in map) {
+    copy[normalizeKeyName(prop)] = map[prop];
+  }
+
+  return copy;
+}
+
+function modifiers(name, event, shift) {
+  if (event.altKey) {
+    name = "Alt-" + name;
+  }
+
+  if (event.ctrlKey) {
+    name = "Ctrl-" + name;
+  }
+
+  if (event.metaKey) {
+    name = "Meta-" + name;
+  }
+
+  if (shift !== false && event.shiftKey) {
+    name = "Shift-" + name;
+  }
+
+  return name;
+} // :: (Object) → Plugin
+// Create a keymap plugin for the given set of bindings.
+//
+// Bindings should map key names to [command](#commands)-style
+// functions, which will be called with `(EditorState, dispatch,
+// EditorView)` arguments, and should return true when they've handled
+// the key. Note that the view argument isn't part of the command
+// protocol, but can be used as an escape hatch if a binding needs to
+// directly interact with the UI.
+//
+// Key names may be strings like `"Shift-Ctrl-Enter"`—a key
+// identifier prefixed with zero or more modifiers. Key identifiers
+// are based on the strings that can appear in
+// [`KeyEvent.key`](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key).
+// Use lowercase letters to refer to letter keys (or uppercase letters
+// if you want shift to be held). You may use `"Space"` as an alias
+// for the `" "` name.
+//
+// Modifiers can be given in any order. `Shift-` (or `s-`), `Alt-` (or
+// `a-`), `Ctrl-` (or `c-` or `Control-`) and `Cmd-` (or `m-` or
+// `Meta-`) are recognized. For characters that are created by holding
+// shift, the `Shift-` prefix is implied, and should not be added
+// explicitly.
+//
+// You can use `Mod-` as a shorthand for `Cmd-` on Mac and `Ctrl-` on
+// other platforms.
+//
+// You can add multiple keymap plugins to an editor. The order in
+// which they appear determines their precedence (the ones early in
+// the array get to dispatch first).
+
+
+function keymap(bindings) {
+  return new Plugin({
+    props: {
+      handleKeyDown: keydownHandler(bindings)
+    }
+  });
+} // :: (Object) → (view: EditorView, event: dom.Event) → bool
+// Given a set of bindings (using the same format as
+// [`keymap`](#keymap.keymap), return a [keydown
+// handler](#view.EditorProps.handleKeyDown) that handles them.
+
+
+function keydownHandler(bindings) {
+  var map = normalize(bindings);
+  return function (view, event) {
+    var name = keyName(event),
+        isChar = name.length == 1 && name != " ",
+        baseName;
+    var direct = map[modifiers(name, event, !isChar)];
+
+    if (direct && direct(view.state, view.dispatch, view)) {
+      return true;
+    }
+
+    if (isChar && (event.shiftKey || event.altKey || event.metaKey) && (baseName = base[event.keyCode]) && baseName != name) {
+      var fromCode = map[modifiers(baseName, event, true)];
+
+      if (fromCode && fromCode(view.state, view.dispatch, view)) {
+        return true;
+      }
+    } else if (isChar && event.shiftKey) {
+      var withShift = map[modifiers(name, event, true)];
+
+      if (withShift && withShift(view.state, view.dispatch, view)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+}
+
+function createKeymaps(customCommands) {
+  return keymap(customCommands.filter(function (c) {
+    return c.command && c.shortcuts;
+  }).reduce(function (mappedCommands, c) {
+    return _objectSpread2({}, mappedCommands, {}, c.shortcuts.reduce(function (mappedShortcut, shortcut) {
+      return _objectSpread2({}, mappedShortcut, _defineProperty({}, shortcut, c.command));
+    }, {}));
+  }, {}));
+}
+
+var MenuView = /*#__PURE__*/function () {
+  function MenuView(items, editorView) {
+    var _this = this;
+
+    _classCallCheck(this, MenuView);
+
+    _defineProperty(this, "createItem", function (_ref) {
+      var text = _ref.text,
+          className = _ref.className,
+          command = _ref.command;
+      var span = document.createElement('span');
+      span.className = 'menuitem ' + className;
+      span.title = text || '';
+      span.textContent = text;
+      span.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+
+        _this.editorView.focus();
+
+        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
+      });
+
+      var checkActive = function checkActive() {
+        var active = command(_this.editorView.state);
+        span.style.display = active ? '' : 'none';
+      };
+
+      _this.dom.appendChild(span);
+
+      return {
+        dom: span,
+        checkActive: checkActive
+      };
+    });
+
+    this.editorView = editorView;
+    this.dom = document.createElement('div');
+    this.dom.className = 'menubar';
+    this.items = items.map(function (_ref2) {
+      var command = _ref2.command,
+          text = _ref2.text,
+          className = _ref2.className;
+
+      if (text || className) {
+        return _this.createItem({
+          command: command,
+          text: text,
+          className: className
+        });
+      }
+
+      return null;
+    }).filter(function (item) {
+      return item;
+    });
+    this.update();
+  }
+
+  _createClass(MenuView, [{
+    key: "update",
+    value: function update() {
+      this.items.forEach(function (_ref3) {
+        var checkActive = _ref3.checkActive;
+        checkActive();
+      });
+    }
+  }, {
+    key: "destroy",
+    value: function destroy() {
+      this.dom.remove();
+    }
+  }]);
+
+  return MenuView;
+}();
+
+function createMenu(customCommands) {
+  return new Plugin({
+    view: function view(editorView) {
+      var menuView = new MenuView(customCommands, editorView);
+      editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom);
+      return menuView;
+    }
+  });
+}
+
 var SimpleMirror = /*#__PURE__*/function () {
   function SimpleMirror(_ref) {
     var selector = _ref.selector,
@@ -18113,6 +18343,7 @@ var SimpleMirror = /*#__PURE__*/function () {
     this.onChange = onChange;
     this.menuPlugin = createMenu(this.commands);
     this.keymapPlugin = createKeymaps(this.commands);
+    this.inputRules = createInputRules(this.commands);
     this.view = new EditorView(document.querySelector(selector), {
       dispatchTransaction: this.dispatchTransaction.bind(this),
       state: this.createState(value)
@@ -18139,7 +18370,7 @@ var SimpleMirror = /*#__PURE__*/function () {
       node.innerHTML = value;
       var state = EditorState.create({
         doc: DOMParser.fromSchema(schema$1).parse(node),
-        plugins: [this.menuPlugin, this.keymapPlugin, history()]
+        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRules, history()]
       });
       return state;
     }
