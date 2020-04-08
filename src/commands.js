@@ -1,6 +1,11 @@
 import schema from './schema'
 import {
-  toggleMark, setBlockType, wrapIn, chainCommands, lift, joinUp,
+  toggleMark,
+  setBlockType,
+  wrapIn,
+  chainCommands,
+  lift,
+  joinUp,
   exitCode,
   newlineInCode,
   createParagraphNear,
@@ -15,11 +20,24 @@ import {
 } from 'prosemirror-commands'
 import {
   splitListItem,
-  wrapInList, liftListItem, sinkListItem
+  wrapInList,
+  liftListItem,
+  sinkListItem
 } from 'prosemirror-schema-list'
 import { undo, redo } from 'prosemirror-history'
+import {
+  quoteRule,
+  orderedListRule,
+  unorderedListRule,
+  codeRule,
+  headingRule
+} from './inputRules'
 
-const backspace = chainCommands(deleteSelection, joinBackward, selectNodeBackward)
+const backspace = chainCommands(
+  deleteSelection,
+  joinBackward,
+  selectNodeBackward
+)
 
 const del = chainCommands(deleteSelection, joinForward, selectNodeForward)
 
@@ -27,6 +45,10 @@ const createPragraph = (state, dispatch, view) => {
   splitBlock(state, dispatch, view)
   wrapIn(schema.nodes.paragraph)(state, dispatch, view)
   return true
+}
+
+const createCodeBlock = () => {
+  return setBlockType(schema.nodes.code_block)
 }
 
 const handleEnter = (state, dispatch, view) => {
@@ -98,7 +120,8 @@ export default {
   h1: {
     command: setBlockType(schema.nodes.heading, { level: 1 }),
     text: 'H1',
-    className: 'avenir'
+    className: 'avenir',
+    inputRule: headingRule
   },
   h2: {
     command: setBlockType(schema.nodes.heading, { level: 2 }),
@@ -107,8 +130,7 @@ export default {
   },
   h3: {
     command: setBlockType(schema.nodes.heading, { level: 3 }),
-    text: 'H3',
-    className: 'avenir'
+    text: 'H3'
   },
   h4: {
     command: setBlockType(schema.nodes.heading, { level: 4 }),
@@ -117,11 +139,13 @@ export default {
   },
   orderedList: {
     command: wrapInList(schema.nodes.ordered_list),
-    className: 'fas fa-list-ol'
+    className: 'fas fa-list-ol',
+    inputRule: orderedListRule
   },
   unorderedList: {
     command: wrapInList(schema.nodes.bullet_list),
-    className: 'fas fa-list-ul'
+    className: 'fas fa-list-ul',
+    inputRule: unorderedListRule
   },
   indent: {
     command: chainCommands(sinkListItem(schema.nodes.list_item), joinUp),
@@ -135,7 +159,13 @@ export default {
   },
   quote: {
     command: wrapIn(schema.nodes.blockquote),
-    className: 'fas fa-quote-left'
+    className: 'fas fa-quote-left',
+    inputRule: quoteRule
+  },
+  code: {
+    command: createCodeBlock,
+    className: 'fas fa-code',
+    inputRule: codeRule
   },
   enter: {
     command: handleEnter,

@@ -22,7 +22,7 @@ class MenuView {
   createItem = ({ text, className, command }) => {
     const span = document.createElement('span')
     span.className = 'menuitem ' + className
-    span.title = text
+    span.title = text || ''
     span.textContent = text
     span.addEventListener('mousedown', (e) => {
       e.preventDefault()
