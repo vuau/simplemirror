@@ -47,9 +47,7 @@ const createPragraph = (state, dispatch, view) => {
   return true
 }
 
-const createCodeBlock = () => {
-  return setBlockType(schema.nodes.code_block)
-}
+const createCodeBlock = setBlockType(schema.nodes.code_block)
 
 const handleEnter = (state, dispatch, view) => {
   const { $from } = state.selection
