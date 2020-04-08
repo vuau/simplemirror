@@ -5,14 +5,13 @@ import { addListNodes } from 'prosemirror-schema-list'
 const strikethrough = {
   parseDOM: [
     { tag: 'strike' },
+    { tag: 'del' },
+    { tag: 's' },
     { style: 'text-decoration:line-through' },
     { style: 'text-decoration-line:line-through' }
   ],
   toDOM: () => [
-    'span',
-    {
-      style: 'text-decoration-line:line-through'
-    }
+    's'
   ]
 }
 
