@@ -49,3 +49,11 @@ export function createInputRules (customCommands) {
   const rules = smartQuotes.concat(ellipsis, emDash, ...[customRules])
   return inputRules({ rules })
 }
+
+export default {
+  quoteRule,
+  orderedListRule,
+  unorderedListRule,
+  codeRule,
+  headingRule
+}

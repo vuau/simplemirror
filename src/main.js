@@ -8,7 +8,7 @@ import builtInCommands from './commands'
 import { fillCommand } from './utils'
 import { createKeymaps } from './keymaps'
 import { createMenu } from './menu'
-import { createInputRules } from './inputRules'
+import builtInInputRules, { createInputRules } from './inputRules'
 
 import 'prosemirror-view/style/prosemirror.css'
 import './main.css'
@@ -59,6 +59,9 @@ class SimpleMirror {
   remove () {
     this.view.destroy()
   }
+
+  static builtInInputRules = builtInInputRules
+  static builtInCommands = builtInCommands
 }
 
 export default SimpleMirror
