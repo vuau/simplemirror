@@ -17790,6 +17790,13 @@
       rules: rules
     });
   }
+  var builtInInputRules = {
+    quoteRule: quoteRule,
+    orderedListRule: orderedListRule,
+    unorderedListRule: unorderedListRule,
+    codeRule: codeRule,
+    headingRule: headingRule
+  };
 
   var backspace$1 = chainCommands(deleteSelection, joinBackward, selectNodeBackward);
   var del$1 = chainCommands(deleteSelection, joinForward, selectNodeForward);
@@ -18391,6 +18398,10 @@
 
     return SimpleMirror;
   }();
+
+  _defineProperty(SimpleMirror, "builtInInputRules", builtInInputRules);
+
+  _defineProperty(SimpleMirror, "builtInCommands", builtInCommands);
 
   return SimpleMirror;
 
