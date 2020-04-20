@@ -17955,7 +17955,6 @@ var fillCommand = function fillCommand(obj1, obj2) {
     });
   }
 
-  console.log('merged', merged);
   return merged;
 };
 

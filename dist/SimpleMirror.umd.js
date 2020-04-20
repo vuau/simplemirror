@@ -17961,7 +17961,6 @@
       });
     }
 
-    console.log('merged', merged);
     return merged;
   };
 
