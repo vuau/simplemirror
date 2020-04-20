@@ -6,6 +6,5 @@ export const fillCommand = (obj1, obj2) => {
       command: obj2[key].command
     }
   }
-  console.log('merged', merged)
   return merged
 }

@@ -1,4 +1,5 @@
 # SimpleMirror
+![](https://img.shields.io/npm/dw/simplemirror)
 
 A simple and easy to use WYSIWYWG editor based on ProseMirror
 
