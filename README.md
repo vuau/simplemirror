@@ -15,8 +15,10 @@ Integrate into your project
     a UMD build, suitable for use in any environment (including the browser, as a `<script>` tag), that includes the external dependency. 
 * `dist/SimpleMirror.css`
     Essential CSS for the editor
-    
+
 Then create a new editor instance. That's it!
+
+Example 1: http://simplemirror.now.sh
 ```js
 new SimpleMirror({
   selector: '#editor',
@@ -34,31 +36,30 @@ new SimpleMirror({
   The content to show in the editor after initialization. It could be plain text or HTML
 ### onChange
   The callback function to watch if editor's content has been changed
-### commands
-  Commands to be used. If ignored, the editor will show all built-in commands. You can specify CSS classes for the menu items and/or keyboard shortcuts if you want.
-
-- Built-in commands: `["undo", "redo", "bold", "italic", "strikethrough", "h1", "h2", "h3", "h4", "orderedList", "unorderedList", "indent", "outdent", "quote", "enter", "break", "exit", "backspace", "delete", "selectAll"]`. There are more coming in the future :)
-
+### config
+  Defined commands to be used. If ignored, the editor will show all default commands using Fontawesome icons. You can specify CSS classes for the menu items and/or keyboard shortcuts and/or input rules if you want.
+- Customizable commands: `["undo", "redo", "bold", "italic", "strikethrough", "h1", "h2", "h3", "h4", "h5", "h6", "orderedList", "unorderedList", "indent", "outdent", "quote", "code"]`. There are more coming in the future :)
 - Key names may be strings like "Shift-Ctrl-Enter"—a key identifier prefixed with zero or more modifiers. Key identifiers are based on the strings that can appear in [KeyEvent.key](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key). Use lowercase letters to refer to letter keys (or uppercase letters if you want shift to be held). You may use "Space" as an alias for the " " name. You can use Mod- as a shorthand for Cmd- on Mac and Ctrl- on other platforms.
 
-Example:
+Example 2: http://simplemirror.now.sh/custom.html
 ```js
 new SimpleMirror({
   selector: '#editor',
   value: 'Please change this text',
-  commands: {
+  config: {
     h1: {
       text: 'H1',
+      inputRule: /^#\s/
     },
     bold: {
       className: 'material-icons',
       text: 'format_bold',
-      shortcuts: ['Mod-b', 'Mod-B']
+      shortcuts: ['Mod-b']
     },
     italic: {
       className: 'material-icons',
       text: 'format_italic',
-      shortcuts: ['Mod-i', 'Mod-I']
+      shortcuts: ['Mod-i']
     },
     undo: {
       shortcuts: ['Mod-z']

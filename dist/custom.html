@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head lang='en'>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width'>
+  <title>SimpleMirror</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" >
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/kognise/water.css@latest/dist/light.min.css">
+  <link rel="stylesheet" href="SimpleMirror.css">
+  <style>
+    html, body { height: 100%; margin: 0 auto; }
+    body { display: flex; flex-direction: column; }
+    #editor { flex: 1 1 auto; }
+    .menubar { position: sticky; top: 0; z-index: 1; background-color: white; }
+  </style>
+</head>
+<body>
+  <div id="editor"></span>
+  <script src='SimpleMirror.umd.js'></script>
+  <script>
+    new SimpleMirror({
+      selector: '#editor',
+      value: 'Please change this text',
+      config: {
+        h1: {
+          text: 'H1',
+          inputRule: /^#\s/
+        },
+        bold: {
+          className: 'material-icons',
+          text: 'format_bold',
+          shortcuts: ['Mod-b']
+        },
+        italic: {
+          className: 'material-icons',
+          text: 'format_italic',
+          shortcuts: ['Mod-i']
+        },
+        undo: {
+          shortcuts: ['Mod-z']
+        }
+      },
+      onChange: function(value) {
+        console.log(value)
+      }
+    })
+  </script>
+  </script>
+</body>
+</html>

@@ -25,13 +25,6 @@ import {
   sinkListItem
 } from 'prosemirror-schema-list'
 import { undo, redo } from 'prosemirror-history'
-import {
-  quoteRule,
-  orderedListRule,
-  unorderedListRule,
-  codeRule,
-  headingRule
-} from './inputRules'
 
 const backspace = chainCommands(
   deleteSelection,
@@ -89,104 +82,27 @@ export const createHardBreak = (state, dispatch) => {
 }
 
 export default {
-  undo: {
-    command: undo,
-    shortcuts: ['Mod-z'],
-    className: 'fas fa-undo'
-  },
-  redo: {
-    command: redo,
-    shortcuts: ['Shift-Mod-Z'],
-    className: 'fas fa-redo'
-  },
-  bold: {
-    command: toggleMark(schema.marks.strong),
-    className: 'fas fa-bold',
-    shortcuts: ['Mod-b', 'Mod-B']
-  },
-  italic: {
-    command: toggleMark(schema.marks.em),
-    mark: schema.marks.em,
-    className: 'fas fa-italic',
-    shortcuts: ['Mod-i', 'Mod-I']
-  },
-  strikethrough: {
-    command: toggleMark(schema.marks.strikethrough),
-    className: 'fas fa-strikethrough',
-    shortcuts: ['Mod-s', 'Mod-S']
-  },
-  h1: {
-    command: setBlockType(schema.nodes.heading, { level: 1 }),
-    text: 'H1',
-    className: 'avenir',
-    inputRule: headingRule
-  },
-  h2: {
-    command: setBlockType(schema.nodes.heading, { level: 2 }),
-    text: 'H2',
-    className: 'avenir'
-  },
-  h3: {
-    command: setBlockType(schema.nodes.heading, { level: 3 }),
-    text: 'H3'
-  },
-  h4: {
-    command: setBlockType(schema.nodes.heading, { level: 4 }),
-    text: 'H4',
-    className: 'avenir'
-  },
-  orderedList: {
-    command: wrapInList(schema.nodes.ordered_list),
-    className: 'fas fa-list-ol',
-    inputRule: orderedListRule
-  },
-  unorderedList: {
-    command: wrapInList(schema.nodes.bullet_list),
-    className: 'fas fa-list-ul',
-    inputRule: unorderedListRule
-  },
-  indent: {
-    command: chainCommands(sinkListItem(schema.nodes.list_item), joinUp),
-    className: 'fas fa-indent',
-    shortcuts: ['Tab']
-  },
-  outdent: {
-    command: chainCommands(liftListItem(schema.nodes.list_item), lift),
-    className: 'fas fa-outdent',
-    shortcuts: ['Shift-Tab']
-  },
-  quote: {
-    command: wrapIn(schema.nodes.blockquote),
-    className: 'fas fa-quote-left',
-    inputRule: quoteRule
-  },
-  code: {
-    command: createCodeBlock,
-    className: 'fas fa-code',
-    inputRule: codeRule
-  },
-  enter: {
-    command: handleEnter,
-    shortcuts: ['Enter']
-  },
-  break: {
-    command: createHardBreak,
-    shortcuts: ['Shift-Enter', 'Ctrl-Enter']
-  },
-  exit: {
-    command: exitCode,
-    shortcuts: ['Mod-Enter']
-  },
-  backspace: {
-    command: backspace,
-    shortcuts: ['Backspace', 'Mod-Backspace']
-  },
-  delete: {
-    command: del,
-    shortcuts: ['Delete', 'Mod-Delete']
-  },
-  selectAll: {
-    command: selectAll,
-    shortcuts: ['Mod-a']
-  }
+  undo: undo,
+  redo: redo,
+  bold: toggleMark(schema.marks.strong),
+  italic: toggleMark(schema.marks.em),
+  strikethrough: toggleMark(schema.marks.strikethrough),
+  h1: setBlockType(schema.nodes.heading, { level: 1 }),
+  h2: setBlockType(schema.nodes.heading, { level: 2 }),
+  h3: setBlockType(schema.nodes.heading, { level: 3 }),
+  h4: setBlockType(schema.nodes.heading, { level: 4 }),
+  h5: setBlockType(schema.nodes.heading, { level: 5 }),
+  h6: setBlockType(schema.nodes.heading, { level: 6 }),
+  orderedList: wrapInList(schema.nodes.ordered_list),
+  unorderedList: wrapInList(schema.nodes.bullet_list),
+  indent: chainCommands(sinkListItem(schema.nodes.list_item), joinUp),
+  outdent: chainCommands(liftListItem(schema.nodes.list_item), lift),
+  quote: wrapIn(schema.nodes.blockquote),
+  code: createCodeBlock,
+  enter: handleEnter,
+  break: createHardBreak,
+  exit: exitCode,
+  backspace: backspace,
+  delete: del,
+  selectAll: selectAll
 }
