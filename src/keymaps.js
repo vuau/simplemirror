@@ -1,21 +1,28 @@
 import { keymap } from 'prosemirror-keymap'
+import commands from './commands'
 
-export function createKeymaps (customCommands) {
-  return keymap(
-    customCommands
-      .filter((c) => c.command && c.shortcuts)
-      .reduce(
-        (mappedCommands, c) => ({
-          ...mappedCommands,
-          ...c.shortcuts.reduce(
-            (mappedShortcut, shortcut) => ({
-              ...mappedShortcut,
-              [shortcut]: c.command
-            }),
-            {}
-          )
-        }),
-        {}
-      )
-  )
+const predefinedKeymaps = {
+  'Mod-z': commands.undo,
+  'Shift-Mod-z': commands.redo,
+  Tab: commands.indent,
+  'Shift-Tab': commands.outdent,
+  Enter: commands.enter,
+  'Shift-Enter': commands.enter,
+  Backspace: commands.backspace,
+  'Mod-Backspace': commands.backspace,
+  Delete: commands.delete,
+  'Mod-Delete': commands.delete,
+  'Mod-a': commands.selectAll
+}
+
+export function createKeymaps (config) {
+  const keys = predefinedKeymaps
+  for (const [key, { shortcuts }] of Object.entries(config)) {
+    if (shortcuts) {
+      shortcuts.forEach((shortcut) => {
+        keys[shortcut] = commands[key]
+      })
+    }
+  }
+  return keymap(keys)
 }

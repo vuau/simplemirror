@@ -4,28 +4,25 @@ import { EditorView } from 'prosemirror-view'
 import { history } from 'prosemirror-history'
 
 import schema from './schema'
-import builtInCommands from './commands'
-import { fillCommand } from './utils'
-import { createKeymaps } from './keymaps'
+import defaultConfig from './defaultConfig'
 import { createMenu } from './menu'
-import builtInInputRules, { createInputRules } from './inputRules'
+import { createKeymaps } from './keymaps'
+import { createInputRules } from './inputRules'
 
 import 'prosemirror-view/style/prosemirror.css'
 import './main.css'
 
 class SimpleMirror {
-  constructor ({ selector, value, onChange, commands }) {
+  constructor ({ selector, value, onChange, config }) {
     if (!selector) {
       throw new Error('you need to specify a selector to init SimpleMirror')
     }
 
-    this.commands = commands
-      ? Object.values(fillCommand(commands, builtInCommands))
-      : Object.values(builtInCommands)
+    this.config = config || defaultConfig
     this.onChange = onChange
-    this.menuPlugin = createMenu(this.commands)
-    this.keymapPlugin = createKeymaps(this.commands)
-    this.inputRules = createInputRules(this.commands)
+    this.menuPlugin = createMenu(this.config)
+    this.keymapPlugin = createKeymaps(this.config)
+    this.inputRulePlugin = createInputRules(this.config)
     this.view = new EditorView(document.querySelector(selector), {
       dispatchTransaction: this.dispatchTransaction.bind(this),
       state: this.createState(value)
@@ -51,7 +48,7 @@ class SimpleMirror {
 
     const state = EditorState.create({
       doc: DOMParser.fromSchema(schema).parse(node),
-      plugins: [this.menuPlugin, this.keymapPlugin, this.inputRules, history()]
+      plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history()]
     })
     return state
   }
@@ -59,9 +56,6 @@ class SimpleMirror {
   remove () {
     this.view.destroy()
   }
-
-  static builtInInputRules = builtInInputRules
-  static builtInCommands = builtInCommands
 }
 
 export default SimpleMirror

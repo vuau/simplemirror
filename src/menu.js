@@ -1,4 +1,5 @@
 import { Plugin } from 'prosemirror-state'
+import commands from './commands'
 
 class MenuView {
   constructor (items, editorView) {
@@ -51,10 +52,19 @@ class MenuView {
   }
 }
 
-export function createMenu (customCommands) {
+export function createMenu (config) {
   return new Plugin({
     view (editorView) {
-      const menuView = new MenuView(customCommands, editorView)
+      const items = []
+      for (const [key, value] of Object.entries(config)) {
+        if (commands[key]) {
+          items.push({
+            command: commands[key],
+            ...value
+          })
+        }
+      }
+      const menuView = new MenuView(items, editorView)
       editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom)
       return menuView
     }
