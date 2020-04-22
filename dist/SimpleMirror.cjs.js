@@ -87,6 +87,62 @@ function _objectSpread2(target) {
   return target;
 }
 
+function _slicedToArray(arr, i) {
+  return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+}
+
+function _arrayWithHoles(arr) {
+  if (Array.isArray(arr)) return arr;
+}
+
+function _iterableToArrayLimit(arr, i) {
+  if (typeof Symbol === "undefined" || !(Symbol.iterator in Object(arr))) return;
+  var _arr = [];
+  var _n = true;
+  var _d = false;
+  var _e = undefined;
+
+  try {
+    for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) {
+      _arr.push(_s.value);
+
+      if (i && _arr.length === i) break;
+    }
+  } catch (err) {
+    _d = true;
+    _e = err;
+  } finally {
+    try {
+      if (!_n && _i["return"] != null) _i["return"]();
+    } finally {
+      if (_d) throw _e;
+    }
+  }
+
+  return _arr;
+}
+
+function _unsupportedIterableToArray(o, minLen) {
+  if (!o) return;
+  if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+  var n = Object.prototype.toString.call(o).slice(8, -1);
+  if (n === "Object" && o.constructor) n = o.constructor.name;
+  if (n === "Map" || n === "Set") return Array.from(n);
+  if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+}
+
+function _arrayLikeToArray(arr, len) {
+  if (len == null || len > arr.length) len = arr.length;
+
+  for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+  return arr2;
+}
+
+function _nonIterableRest() {
+  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+
 // ::- Persistent data structure representing an ordered mapping from
 // strings to values, with some convenient update methods.
 function OrderedMap(content) {
@@ -16787,6 +16843,73 @@ var schema$1 = new Schema({
   })
 });
 
+var defaultConfig = {
+  undo: {
+    className: 'fas fa-undo',
+    shortcut: ['Mod-z']
+  },
+  redo: {
+    className: 'fas fa-redo',
+    shortcuts: ['Shift-Mod-z']
+  },
+  bold: {
+    className: 'fas fa-bold',
+    shortcuts: ['Mod-b']
+  },
+  italic: {
+    className: 'fas fa-italic',
+    shortcuts: ['Mod-i']
+  },
+  strikethrough: {
+    className: 'fas fa-strikethrough',
+    shortcuts: ['Mod-s']
+  },
+  h1: {
+    text: 'H1',
+    className: 'avenir',
+    inputRule: /^#\s/
+  },
+  h2: {
+    text: 'H2',
+    className: 'avenir',
+    inputRule: /^##\s/
+  },
+  h3: {
+    text: 'H3',
+    className: 'avenir',
+    inputRule: /^###\s/
+  },
+  h4: {
+    text: 'H4',
+    className: 'avenir',
+    inputRule: /^####\s/
+  },
+  orderedList: {
+    className: 'fas fa-list-ol',
+    inputRule: /^(\d+)\.\s$/
+  },
+  unorderedList: {
+    className: 'fas fa-list-ul',
+    inputRule: /^\s*([-+*])\s$/
+  },
+  indent: {
+    className: 'fas fa-indent',
+    shortcuts: ['Tab']
+  },
+  outdent: {
+    className: 'fas fa-outdent',
+    shortcuts: ['Shift-Tab']
+  },
+  quote: {
+    className: 'fas fa-quote-left',
+    inputRule: /^\s*>\s$/
+  },
+  code: {
+    className: 'fas fa-code',
+    inputRule: /^```$/
+  }
+};
+
 // Delete the selection, if there is one.
 
 function deleteSelection(state, dispatch) {
@@ -17567,233 +17690,6 @@ for (var key in pcBaseKeymap) {
 
 var mac = typeof navigator != "undefined" ? /Mac/.test(navigator.platform) : typeof os != "undefined" ? os.platform() == "darwin" : false; // :: Object
 
-// that, when typed, causes something to happen. This might be
-// changing two dashes into an emdash, wrapping a paragraph starting
-// with `"> "` into a blockquote, or something entirely different.
-
-var InputRule = function InputRule(match, handler) {
-  this.match = match;
-  this.handler = typeof handler == "string" ? stringHandler(handler) : handler;
-};
-
-function stringHandler(string) {
-  return function (state, match, start, end) {
-    var insert = string;
-
-    if (match[1]) {
-      var offset = match[0].lastIndexOf(match[1]);
-      insert += match[0].slice(offset + match[1].length);
-      start += offset;
-      var cutOff = start - end;
-
-      if (cutOff > 0) {
-        insert = match[0].slice(offset - cutOff, offset) + insert;
-        start = end;
-      }
-    }
-
-    return state.tr.insertText(insert, start, end);
-  };
-}
-
-var MAX_MATCH = 500; // :: (config: {rules: [InputRule]}) → Plugin
-// Create an input rules plugin. When enabled, it will cause text
-// input that matches any of the given rules to trigger the rule's
-// action.
-
-function inputRules(ref) {
-  var rules = ref.rules;
-  var plugin = new Plugin({
-    state: {
-      init: function init() {
-        return null;
-      },
-      apply: function apply(tr, prev) {
-        var stored = tr.getMeta(this);
-
-        if (stored) {
-          return stored;
-        }
-
-        return tr.selectionSet || tr.docChanged ? null : prev;
-      }
-    },
-    props: {
-      handleTextInput: function handleTextInput(view, from, to, text) {
-        return run(view, from, to, text, rules, plugin);
-      },
-      handleDOMEvents: {
-        compositionend: function compositionend(view) {
-          setTimeout(function () {
-            var ref = view.state.selection;
-            var $cursor = ref.$cursor;
-
-            if ($cursor) {
-              run(view, $cursor.pos, $cursor.pos, "", rules, plugin);
-            }
-          });
-        }
-      }
-    },
-    isInputRules: true
-  });
-  return plugin;
-}
-
-function run(view, from, to, text, rules, plugin) {
-  if (view.composing) {
-    return false;
-  }
-
-  var state = view.state,
-      $from = state.doc.resolve(from);
-
-  if ($from.parent.type.spec.code) {
-    return false;
-  }
-
-  var textBefore = $from.parent.textBetween(Math.max(0, $from.parentOffset - MAX_MATCH), $from.parentOffset, null, "\uFFFC") + text;
-
-  for (var i = 0; i < rules.length; i++) {
-    var match = rules[i].match.exec(textBefore);
-    var tr = match && rules[i].handler(state, match, from - (match[0].length - text.length), to);
-
-    if (!tr) {
-      continue;
-    }
-
-    view.dispatch(tr.setMeta(plugin, {
-      transform: tr,
-      from: from,
-      to: to,
-      text: text
-    }));
-    return true;
-  }
-
-  return false;
-} // :: (EditorState, ?(Transaction)) → bool
-
-
-var emDash = new InputRule(/--$/, "—"); // :: InputRule Converts three dots to an ellipsis character.
-
-var ellipsis = new InputRule(/\.\.\.$/, "…"); // :: InputRule “Smart” opening double quotes.
-
-var openDoubleQuote = new InputRule(/(?:^|[\s\{\[\(\<'"\u2018\u201C])(")$/, "“"); // :: InputRule “Smart” closing double quotes.
-
-var closeDoubleQuote = new InputRule(/"$/, "”"); // :: InputRule “Smart” opening single quotes.
-
-var openSingleQuote = new InputRule(/(?:^|[\s\{\[\(\<'"\u2018\u201C])(')$/, "‘"); // :: InputRule “Smart” closing single quotes.
-
-var closeSingleQuote = new InputRule(/'$/, "’"); // :: [InputRule] Smart-quote related input rules.
-
-var smartQuotes = [openDoubleQuote, closeDoubleQuote, openSingleQuote, closeSingleQuote]; // :: (RegExp, NodeType, ?union<Object, ([string]) → ?Object>, ?([string], Node) → bool) → InputRule
-// Build an input rule for automatically wrapping a textblock when a
-// given string is typed. The `regexp` argument is
-// directly passed through to the `InputRule` constructor. You'll
-// probably want the regexp to start with `^`, so that the pattern can
-// only occur at the start of a textblock.
-//
-// `nodeType` is the type of node to wrap in. If it needs attributes,
-// you can either pass them directly, or pass a function that will
-// compute them from the regular expression match.
-//
-// By default, if there's a node with the same type above the newly
-// wrapped node, the rule will try to [join](#transform.Transform.join) those
-// two nodes. You can pass a join predicate, which takes a regular
-// expression match and the node before the wrapped node, and can
-// return a boolean to indicate whether a join should happen.
-
-function wrappingInputRule(regexp, nodeType, getAttrs, joinPredicate) {
-  return new InputRule(regexp, function (state, match, start, end) {
-    var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
-    var tr = state.tr.delete(start, end);
-    var $start = tr.doc.resolve(start),
-        range = $start.blockRange(),
-        wrapping = range && findWrapping(range, nodeType, attrs);
-
-    if (!wrapping) {
-      return null;
-    }
-
-    tr.wrap(range, wrapping);
-    var before = tr.doc.resolve(start - 1).nodeBefore;
-
-    if (before && before.type == nodeType && canJoin(tr.doc, start - 1) && (!joinPredicate || joinPredicate(match, before))) {
-      tr.join(start - 1);
-    }
-
-    return tr;
-  });
-} // :: (RegExp, NodeType, ?union<Object, ([string]) → ?Object>) → InputRule
-// Build an input rule that changes the type of a textblock when the
-// matched text is typed into it. You'll usually want to start your
-// regexp with `^` to that it is only matched at the start of a
-// textblock. The optional `getAttrs` parameter can be used to compute
-// the new node's attributes, and works the same as in the
-// `wrappingInputRule` function.
-
-
-function textblockTypeInputRule(regexp, nodeType, getAttrs) {
-  return new InputRule(regexp, function (state, match, start, end) {
-    var $start = state.doc.resolve(start);
-    var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
-
-    if (!$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), nodeType)) {
-      return null;
-    }
-
-    return state.tr.delete(start, end).setBlockType(start, start, nodeType, attrs);
-  });
-}
-
-// at the start of a textblock into a blockquote.
-
-var quoteRule = wrappingInputRule(/^\s*>\s$/, schema$1.nodes.blockquote); // Given a list node type, returns an input rule that turns a number
-// followed by a dot at the start of a textblock into an ordered list.
-
-var orderedListRule = wrappingInputRule(/^(\d+)\.\s$/, schema$1.nodes.ordered_list, function (match) {
-  return {
-    order: +match[1]
-  };
-}, function (match, node) {
-  return node.childCount + node.attrs.order === +match[1];
-}); // Given a list node type, returns an input rule that turns a bullet
-// (dash, plush, or asterisk) at the start of a textblock into a
-// bullet list.
-
-var unorderedListRule = wrappingInputRule(/^\s*([-+*])\s$/, schema$1.nodes.bullet_list); // Given a code block node type, returns an input rule that turns a
-// textblock starting with three backticks into a code block.
-
-var codeRule = textblockTypeInputRule(/^```$/, schema$1.nodes.code_block); // Given a node type and a maximum level, creates an input rule that
-// turns up to that number of `#` characters followed by a space at
-// the start of a textblock into a heading whose level corresponds to
-// the number of `#` signs.
-
-var headingRule = textblockTypeInputRule(new RegExp('^(#{1,' + 6 + '})\\s$'), schema$1.nodes.heading, function (match) {
-  return {
-    level: match[1].length
-  };
-});
-function createInputRules(customCommands) {
-  var customRules = customCommands.map(function (c) {
-    return c.inputRule;
-  }).filter(function (c) {
-    return c;
-  });
-  var rules = smartQuotes.concat.apply(smartQuotes, [ellipsis, emDash].concat([customRules]));
-  return inputRules({
-    rules: rules
-  });
-}
-var builtInInputRules = {
-  quoteRule: quoteRule,
-  orderedListRule: orderedListRule,
-  unorderedListRule: unorderedListRule,
-  codeRule: codeRule,
-  headingRule: headingRule
-};
-
 var backspace$1 = chainCommands(deleteSelection, joinBackward, selectNodeBackward);
 var del$1 = chainCommands(deleteSelection, joinForward, selectNodeForward);
 
@@ -17837,128 +17733,143 @@ var createHardBreak = function createHardBreak(state, dispatch) {
 
   return true;
 };
-var builtInCommands = {
-  undo: {
-    command: undo,
-    shortcuts: ['Mod-z'],
-    className: 'fas fa-undo'
-  },
-  redo: {
-    command: redo,
-    shortcuts: ['Shift-Mod-Z'],
-    className: 'fas fa-redo'
-  },
-  bold: {
-    command: toggleMark(schema$1.marks.strong),
-    className: 'fas fa-bold',
-    shortcuts: ['Mod-b', 'Mod-B']
-  },
-  italic: {
-    command: toggleMark(schema$1.marks.em),
-    mark: schema$1.marks.em,
-    className: 'fas fa-italic',
-    shortcuts: ['Mod-i', 'Mod-I']
-  },
-  strikethrough: {
-    command: toggleMark(schema$1.marks.strikethrough),
-    className: 'fas fa-strikethrough',
-    shortcuts: ['Mod-s', 'Mod-S']
-  },
-  h1: {
-    command: setBlockType(schema$1.nodes.heading, {
-      level: 1
-    }),
-    text: 'H1',
-    className: 'avenir',
-    inputRule: headingRule
-  },
-  h2: {
-    command: setBlockType(schema$1.nodes.heading, {
-      level: 2
-    }),
-    text: 'H2',
-    className: 'avenir'
-  },
-  h3: {
-    command: setBlockType(schema$1.nodes.heading, {
-      level: 3
-    }),
-    text: 'H3'
-  },
-  h4: {
-    command: setBlockType(schema$1.nodes.heading, {
-      level: 4
-    }),
-    text: 'H4',
-    className: 'avenir'
-  },
-  orderedList: {
-    command: wrapInList(schema$1.nodes.ordered_list),
-    className: 'fas fa-list-ol',
-    inputRule: orderedListRule
-  },
-  unorderedList: {
-    command: wrapInList(schema$1.nodes.bullet_list),
-    className: 'fas fa-list-ul',
-    inputRule: unorderedListRule
-  },
-  indent: {
-    command: chainCommands(sinkListItem(schema$1.nodes.list_item), joinUp),
-    className: 'fas fa-indent',
-    shortcuts: ['Tab']
-  },
-  outdent: {
-    command: chainCommands(liftListItem(schema$1.nodes.list_item), lift),
-    className: 'fas fa-outdent',
-    shortcuts: ['Shift-Tab']
-  },
-  quote: {
-    command: wrapIn(schema$1.nodes.blockquote),
-    className: 'fas fa-quote-left',
-    inputRule: quoteRule
-  },
-  code: {
-    command: createCodeBlock,
-    className: 'fas fa-code',
-    inputRule: codeRule
-  },
-  enter: {
-    command: handleEnter,
-    shortcuts: ['Enter']
-  },
-  break: {
-    command: createHardBreak,
-    shortcuts: ['Shift-Enter', 'Ctrl-Enter']
-  },
-  exit: {
-    command: exitCode,
-    shortcuts: ['Mod-Enter']
-  },
-  backspace: {
-    command: backspace$1,
-    shortcuts: ['Backspace', 'Mod-Backspace']
-  },
-  delete: {
-    command: del$1,
-    shortcuts: ['Delete', 'Mod-Delete']
-  },
-  selectAll: {
-    command: selectAll,
-    shortcuts: ['Mod-a']
-  }
+var commands = {
+  undo: undo,
+  redo: redo,
+  bold: toggleMark(schema$1.marks.strong),
+  italic: toggleMark(schema$1.marks.em),
+  strikethrough: toggleMark(schema$1.marks.strikethrough),
+  h1: setBlockType(schema$1.nodes.heading, {
+    level: 1
+  }),
+  h2: setBlockType(schema$1.nodes.heading, {
+    level: 2
+  }),
+  h3: setBlockType(schema$1.nodes.heading, {
+    level: 3
+  }),
+  h4: setBlockType(schema$1.nodes.heading, {
+    level: 4
+  }),
+  h5: setBlockType(schema$1.nodes.heading, {
+    level: 5
+  }),
+  h6: setBlockType(schema$1.nodes.heading, {
+    level: 6
+  }),
+  orderedList: wrapInList(schema$1.nodes.ordered_list),
+  unorderedList: wrapInList(schema$1.nodes.bullet_list),
+  indent: chainCommands(sinkListItem(schema$1.nodes.list_item), joinUp),
+  outdent: chainCommands(liftListItem(schema$1.nodes.list_item), lift),
+  quote: wrapIn(schema$1.nodes.blockquote),
+  code: createCodeBlock,
+  enter: handleEnter,
+  break: createHardBreak,
+  exit: exitCode,
+  backspace: backspace$1,
+  delete: del$1,
+  selectAll: selectAll
 };
 
-var fillCommand = function fillCommand(obj1, obj2) {
-  var merged = {};
+var MenuView = /*#__PURE__*/function () {
+  function MenuView(items, editorView) {
+    var _this = this;
 
-  for (var key in obj1) {
-    merged[key] = _objectSpread2({}, obj1[key], {
-      command: obj2[key].command
+    _classCallCheck(this, MenuView);
+
+    _defineProperty(this, "createItem", function (_ref) {
+      var text = _ref.text,
+          className = _ref.className,
+          command = _ref.command;
+      var span = document.createElement('span');
+      span.className = 'menuitem ' + className;
+      span.title = text || '';
+      span.textContent = text;
+      span.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+
+        _this.editorView.focus();
+
+        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
+      });
+
+      var checkActive = function checkActive() {
+        var active = command(_this.editorView.state);
+        span.style.display = active ? '' : 'none';
+      };
+
+      _this.dom.appendChild(span);
+
+      return {
+        dom: span,
+        checkActive: checkActive
+      };
     });
+
+    this.editorView = editorView;
+    this.dom = document.createElement('div');
+    this.dom.className = 'menubar';
+    this.items = items.map(function (_ref2) {
+      var command = _ref2.command,
+          text = _ref2.text,
+          className = _ref2.className;
+
+      if (text || className) {
+        return _this.createItem({
+          command: command,
+          text: text,
+          className: className
+        });
+      }
+
+      return null;
+    }).filter(function (item) {
+      return item;
+    });
+    this.update();
   }
 
-  return merged;
-};
+  _createClass(MenuView, [{
+    key: "update",
+    value: function update() {
+      this.items.forEach(function (_ref3) {
+        var checkActive = _ref3.checkActive;
+        checkActive();
+      });
+    }
+  }, {
+    key: "destroy",
+    value: function destroy() {
+      this.dom.remove();
+    }
+  }]);
+
+  return MenuView;
+}();
+
+function createMenu(config) {
+  return new Plugin({
+    view: function view(editorView) {
+      var items = [];
+
+      for (var _i = 0, _Object$entries = Object.entries(config); _i < _Object$entries.length; _i++) {
+        var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
+            key = _Object$entries$_i[0],
+            value = _Object$entries$_i[1];
+
+        if (commands[key]) {
+          items.push(_objectSpread2({
+            command: commands[key]
+          }, value));
+        }
+      }
+
+      var menuView = new MenuView(items, editorView);
+      editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom);
+      return menuView;
+    }
+  });
+}
 
 var base = {
   8: "Backspace",
@@ -18240,99 +18151,305 @@ function keydownHandler(bindings) {
   };
 }
 
-function createKeymaps(customCommands) {
-  return keymap(customCommands.filter(function (c) {
-    return c.command && c.shortcuts;
-  }).reduce(function (mappedCommands, c) {
-    return _objectSpread2({}, mappedCommands, {}, c.shortcuts.reduce(function (mappedShortcut, shortcut) {
-      return _objectSpread2({}, mappedShortcut, _defineProperty({}, shortcut, c.command));
-    }, {}));
-  }, {}));
-}
+var predefinedKeymaps = {
+  'Mod-z': commands.undo,
+  'Shift-Mod-z': commands.redo,
+  Tab: commands.indent,
+  'Shift-Tab': commands.outdent,
+  Enter: commands.enter,
+  'Shift-Enter': commands.enter,
+  Backspace: commands.backspace,
+  'Mod-Backspace': commands.backspace,
+  Delete: commands.delete,
+  'Mod-Delete': commands.delete,
+  'Mod-a': commands.selectAll
+};
+function createKeymaps(config) {
+  var keys = predefinedKeymaps;
 
-var MenuView = /*#__PURE__*/function () {
-  function MenuView(items, editorView) {
-    var _this = this;
+  var _loop = function _loop() {
+    var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
+        key = _Object$entries$_i[0],
+        shortcuts = _Object$entries$_i[1].shortcuts;
 
-    _classCallCheck(this, MenuView);
-
-    _defineProperty(this, "createItem", function (_ref) {
-      var text = _ref.text,
-          className = _ref.className,
-          command = _ref.command;
-      var span = document.createElement('span');
-      span.className = 'menuitem ' + className;
-      span.title = text || '';
-      span.textContent = text;
-      span.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-
-        _this.editorView.focus();
-
-        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
+    if (shortcuts) {
+      shortcuts.forEach(function (shortcut) {
+        keys[shortcut] = commands[key];
       });
+    }
+  };
 
-      var checkActive = function checkActive() {
-        var active = command(_this.editorView.state);
-        span.style.display = active ? '' : 'none';
-      };
-
-      _this.dom.appendChild(span);
-
-      return {
-        dom: span,
-        checkActive: checkActive
-      };
-    });
-
-    this.editorView = editorView;
-    this.dom = document.createElement('div');
-    this.dom.className = 'menubar';
-    this.items = items.map(function (_ref2) {
-      var command = _ref2.command,
-          text = _ref2.text,
-          className = _ref2.className;
-
-      if (text || className) {
-        return _this.createItem({
-          command: command,
-          text: text,
-          className: className
-        });
-      }
-
-      return null;
-    }).filter(function (item) {
-      return item;
-    });
-    this.update();
+  for (var _i = 0, _Object$entries = Object.entries(config); _i < _Object$entries.length; _i++) {
+    _loop();
   }
 
-  _createClass(MenuView, [{
-    key: "update",
-    value: function update() {
-      this.items.forEach(function (_ref3) {
-        var checkActive = _ref3.checkActive;
-        checkActive();
-      });
-    }
-  }, {
-    key: "destroy",
-    value: function destroy() {
-      this.dom.remove();
-    }
-  }]);
+  return keymap(keys);
+}
 
-  return MenuView;
-}();
+// that, when typed, causes something to happen. This might be
+// changing two dashes into an emdash, wrapping a paragraph starting
+// with `"> "` into a blockquote, or something entirely different.
 
-function createMenu(customCommands) {
-  return new Plugin({
-    view: function view(editorView) {
-      var menuView = new MenuView(customCommands, editorView);
-      editorView.dom.parentNode.insertBefore(menuView.dom, editorView.dom);
-      return menuView;
+var InputRule = function InputRule(match, handler) {
+  this.match = match;
+  this.handler = typeof handler == "string" ? stringHandler(handler) : handler;
+};
+
+function stringHandler(string) {
+  return function (state, match, start, end) {
+    var insert = string;
+
+    if (match[1]) {
+      var offset = match[0].lastIndexOf(match[1]);
+      insert += match[0].slice(offset + match[1].length);
+      start += offset;
+      var cutOff = start - end;
+
+      if (cutOff > 0) {
+        insert = match[0].slice(offset - cutOff, offset) + insert;
+        start = end;
+      }
     }
+
+    return state.tr.insertText(insert, start, end);
+  };
+}
+
+var MAX_MATCH = 500; // :: (config: {rules: [InputRule]}) → Plugin
+// Create an input rules plugin. When enabled, it will cause text
+// input that matches any of the given rules to trigger the rule's
+// action.
+
+function inputRules(ref) {
+  var rules = ref.rules;
+  var plugin = new Plugin({
+    state: {
+      init: function init() {
+        return null;
+      },
+      apply: function apply(tr, prev) {
+        var stored = tr.getMeta(this);
+
+        if (stored) {
+          return stored;
+        }
+
+        return tr.selectionSet || tr.docChanged ? null : prev;
+      }
+    },
+    props: {
+      handleTextInput: function handleTextInput(view, from, to, text) {
+        return run(view, from, to, text, rules, plugin);
+      },
+      handleDOMEvents: {
+        compositionend: function compositionend(view) {
+          setTimeout(function () {
+            var ref = view.state.selection;
+            var $cursor = ref.$cursor;
+
+            if ($cursor) {
+              run(view, $cursor.pos, $cursor.pos, "", rules, plugin);
+            }
+          });
+        }
+      }
+    },
+    isInputRules: true
+  });
+  return plugin;
+}
+
+function run(view, from, to, text, rules, plugin) {
+  if (view.composing) {
+    return false;
+  }
+
+  var state = view.state,
+      $from = state.doc.resolve(from);
+
+  if ($from.parent.type.spec.code) {
+    return false;
+  }
+
+  var textBefore = $from.parent.textBetween(Math.max(0, $from.parentOffset - MAX_MATCH), $from.parentOffset, null, "\uFFFC") + text;
+
+  for (var i = 0; i < rules.length; i++) {
+    var match = rules[i].match.exec(textBefore);
+    var tr = match && rules[i].handler(state, match, from - (match[0].length - text.length), to);
+
+    if (!tr) {
+      continue;
+    }
+
+    view.dispatch(tr.setMeta(plugin, {
+      transform: tr,
+      from: from,
+      to: to,
+      text: text
+    }));
+    return true;
+  }
+
+  return false;
+} // :: (EditorState, ?(Transaction)) → bool
+
+
+var emDash = new InputRule(/--$/, "—"); // :: InputRule Converts three dots to an ellipsis character.
+
+var ellipsis = new InputRule(/\.\.\.$/, "…"); // :: InputRule “Smart” opening double quotes.
+
+var openDoubleQuote = new InputRule(/(?:^|[\s\{\[\(\<'"\u2018\u201C])(")$/, "“"); // :: InputRule “Smart” closing double quotes.
+
+var closeDoubleQuote = new InputRule(/"$/, "”"); // :: InputRule “Smart” opening single quotes.
+
+var openSingleQuote = new InputRule(/(?:^|[\s\{\[\(\<'"\u2018\u201C])(')$/, "‘"); // :: InputRule “Smart” closing single quotes.
+
+var closeSingleQuote = new InputRule(/'$/, "’"); // :: [InputRule] Smart-quote related input rules.
+
+var smartQuotes = [openDoubleQuote, closeDoubleQuote, openSingleQuote, closeSingleQuote]; // :: (RegExp, NodeType, ?union<Object, ([string]) → ?Object>, ?([string], Node) → bool) → InputRule
+// Build an input rule for automatically wrapping a textblock when a
+// given string is typed. The `regexp` argument is
+// directly passed through to the `InputRule` constructor. You'll
+// probably want the regexp to start with `^`, so that the pattern can
+// only occur at the start of a textblock.
+//
+// `nodeType` is the type of node to wrap in. If it needs attributes,
+// you can either pass them directly, or pass a function that will
+// compute them from the regular expression match.
+//
+// By default, if there's a node with the same type above the newly
+// wrapped node, the rule will try to [join](#transform.Transform.join) those
+// two nodes. You can pass a join predicate, which takes a regular
+// expression match and the node before the wrapped node, and can
+// return a boolean to indicate whether a join should happen.
+
+function wrappingInputRule(regexp, nodeType, getAttrs, joinPredicate) {
+  return new InputRule(regexp, function (state, match, start, end) {
+    var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
+    var tr = state.tr.delete(start, end);
+    var $start = tr.doc.resolve(start),
+        range = $start.blockRange(),
+        wrapping = range && findWrapping(range, nodeType, attrs);
+
+    if (!wrapping) {
+      return null;
+    }
+
+    tr.wrap(range, wrapping);
+    var before = tr.doc.resolve(start - 1).nodeBefore;
+
+    if (before && before.type == nodeType && canJoin(tr.doc, start - 1) && (!joinPredicate || joinPredicate(match, before))) {
+      tr.join(start - 1);
+    }
+
+    return tr;
+  });
+} // :: (RegExp, NodeType, ?union<Object, ([string]) → ?Object>) → InputRule
+// Build an input rule that changes the type of a textblock when the
+// matched text is typed into it. You'll usually want to start your
+// regexp with `^` to that it is only matched at the start of a
+// textblock. The optional `getAttrs` parameter can be used to compute
+// the new node's attributes, and works the same as in the
+// `wrappingInputRule` function.
+
+
+function textblockTypeInputRule(regexp, nodeType, getAttrs) {
+  return new InputRule(regexp, function (state, match, start, end) {
+    var $start = state.doc.resolve(start);
+    var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
+
+    if (!$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), nodeType)) {
+      return null;
+    }
+
+    return state.tr.delete(start, end).setBlockType(start, start, nodeType, attrs);
+  });
+}
+
+// at the start of a textblock into a blockquote.
+
+var quoteRule = function quoteRule(rule) {
+  return wrappingInputRule(rule, schema$1.nodes.blockquote);
+}; // Given a list node type, returns an input rule that turns a number
+// followed by a dot at the start of a textblock into an ordered list.
+
+var orderedListRule = function orderedListRule(rule) {
+  return wrappingInputRule(rule, schema$1.nodes.ordered_list, function (match) {
+    return {
+      order: +match[1]
+    };
+  }, function (match, node) {
+    return node.childCount + node.attrs.order === +match[1];
+  });
+}; // Given a list node type, returns an input rule that turns a bullet
+// (dash, plush, or asterisk) at the start of a textblock into a
+// bullet list.
+
+var unorderedListRule = function unorderedListRule(rule) {
+  return wrappingInputRule(rule, schema$1.nodes.bullet_list);
+}; // Given a code block node type, returns an input rule that turns a
+// textblock starting with three backticks into a code block.
+
+var codeRule = function codeRule(rule) {
+  return textblockTypeInputRule(rule, schema$1.nodes.code_block);
+}; // Given a node type and a maximum level, creates an input rule that
+// turns up to that number of `#` characters followed by a space at
+// the start of a textblock into a heading whose level corresponds to
+// the number of `#` signs.
+
+var h1Rule = function h1Rule(rule) {
+  return textblockTypeInputRule(rule, schema$1.nodes.heading, function () {
+    return {
+      level: 1
+    };
+  });
+};
+var h2Rule = function h2Rule(rule) {
+  return textblockTypeInputRule(rule, schema$1.nodes.heading, function () {
+    return {
+      level: 2
+    };
+  });
+};
+var h3Rule = function h3Rule(rule) {
+  return textblockTypeInputRule(rule, schema$1.nodes.heading, function () {
+    return {
+      level: 3
+    };
+  });
+};
+var h4Rule = function h4Rule(rule) {
+  return textblockTypeInputRule(rule, schema$1.nodes.heading, function () {
+    return {
+      level: 4
+    };
+  });
+};
+var supportRules = {
+  quote: quoteRule,
+  orderedList: orderedListRule,
+  unorderedList: unorderedListRule,
+  code: codeRule,
+  h1: h1Rule,
+  h2: h2Rule,
+  h3: h3Rule,
+  h4: h4Rule
+};
+function createInputRules(config) {
+  var rules = [];
+
+  for (var _i = 0, _Object$entries = Object.entries(config); _i < _Object$entries.length; _i++) {
+    var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
+        key = _Object$entries$_i[0],
+        inputRule = _Object$entries$_i[1].inputRule;
+
+    if (inputRule) {
+      rules.push(supportRules[key](inputRule));
+    }
+  }
+
+  return inputRules({
+    rules: smartQuotes.concat.apply(smartQuotes, [ellipsis, emDash].concat([rules]))
   });
 }
 
@@ -18341,7 +18458,7 @@ var SimpleMirror = /*#__PURE__*/function () {
     var selector = _ref.selector,
         value = _ref.value,
         onChange = _ref.onChange,
-        commands = _ref.commands;
+        config = _ref.config;
 
     _classCallCheck(this, SimpleMirror);
 
@@ -18349,11 +18466,11 @@ var SimpleMirror = /*#__PURE__*/function () {
       throw new Error('you need to specify a selector to init SimpleMirror');
     }
 
-    this.commands = commands ? Object.values(fillCommand(commands, builtInCommands)) : Object.values(builtInCommands);
+    this.config = config || defaultConfig;
     this.onChange = onChange;
-    this.menuPlugin = createMenu(this.commands);
-    this.keymapPlugin = createKeymaps(this.commands);
-    this.inputRules = createInputRules(this.commands);
+    this.menuPlugin = createMenu(this.config);
+    this.keymapPlugin = createKeymaps(this.config);
+    this.inputRulePlugin = createInputRules(this.config);
     this.view = new EditorView(document.querySelector(selector), {
       dispatchTransaction: this.dispatchTransaction.bind(this),
       state: this.createState(value)
@@ -18380,7 +18497,7 @@ var SimpleMirror = /*#__PURE__*/function () {
       node.innerHTML = value;
       var state = EditorState.create({
         doc: DOMParser.fromSchema(schema$1).parse(node),
-        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRules, history()]
+        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history()]
       });
       return state;
     }
@@ -18393,10 +18510,6 @@ var SimpleMirror = /*#__PURE__*/function () {
 
   return SimpleMirror;
 }();
-
-_defineProperty(SimpleMirror, "builtInInputRules", builtInInputRules);
-
-_defineProperty(SimpleMirror, "builtInCommands", builtInCommands);
 
 module.exports = SimpleMirror;
 //# sourceMappingURL=SimpleMirror.cjs.js.map
