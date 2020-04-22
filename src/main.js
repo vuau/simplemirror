@@ -7,6 +7,7 @@ import schema from './schema'
 import defaultConfig from './defaultConfig'
 import { createMenu } from './menu'
 import { createKeymaps } from './keymaps'
+import { createInputRules } from './inputRules'
 
 import 'prosemirror-view/style/prosemirror.css'
 import './main.css'
@@ -21,6 +22,7 @@ class SimpleMirror {
     this.onChange = onChange
     this.menuPlugin = createMenu(this.config)
     this.keymapPlugin = createKeymaps(this.config)
+    this.inputRulePlugin = createInputRules(this.config)
     this.view = new EditorView(document.querySelector(selector), {
       dispatchTransaction: this.dispatchTransaction.bind(this),
       state: this.createState(value)
@@ -46,7 +48,7 @@ class SimpleMirror {
 
     const state = EditorState.create({
       doc: DOMParser.fromSchema(schema).parse(node),
-      plugins: [this.menuPlugin, this.keymapPlugin, history()]
+      plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history()]
     })
     return state
   }

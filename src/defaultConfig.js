@@ -21,24 +21,31 @@ export default {
   },
   h1: {
     text: 'H1',
-    className: 'avenir'
+    className: 'avenir',
+    inputRule: /^#\s/
   },
   h2: {
     text: 'H2',
-    className: 'avenir'
+    className: 'avenir',
+    inputRule: /^##\s/
   },
   h3: {
-    text: 'H3'
+    text: 'H3',
+    className: 'avenir',
+    inputRule: /^###\s/
   },
   h4: {
     text: 'H4',
-    className: 'avenir'
+    className: 'avenir',
+    inputRule: /^####\s/
   },
   orderedList: {
-    className: 'fas fa-list-ol'
+    className: 'fas fa-list-ol',
+    inputRule: /^(\d+)\.\s$/
   },
   unorderedList: {
-    className: 'fas fa-list-ul'
+    className: 'fas fa-list-ul',
+    inputRule: /^\s*([-+*])\s$/
   },
   indent: {
     className: 'fas fa-indent',
@@ -49,9 +56,11 @@ export default {
     shortcuts: ['Shift-Tab']
   },
   quote: {
-    className: 'fas fa-quote-left'
+    className: 'fas fa-quote-left',
+    inputRule: /^\s*>\s$/
   },
   code: {
-    className: 'fas fa-code'
+    className: 'fas fa-code',
+    inputRule: /^```$/
   }
 }
