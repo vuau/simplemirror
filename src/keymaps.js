@@ -1,21 +1,14 @@
 import { keymap } from 'prosemirror-keymap'
+import commands from './commands'
 
-export function createKeymaps (customCommands) {
-  return keymap(
-    customCommands
-      .filter((c) => c.command && c.shortcuts)
-      .reduce(
-        (mappedCommands, c) => ({
-          ...mappedCommands,
-          ...c.shortcuts.reduce(
-            (mappedShortcut, shortcut) => ({
-              ...mappedShortcut,
-              [shortcut]: c.command
-            }),
-            {}
-          )
-        }),
-        {}
-      )
-  )
+export function createKeymaps (config) {
+  const keys = {}
+  for (const [key, { shortcuts }] of Object.entries(config)) {
+    if (shortcuts) {
+      shortcuts.forEach((shortcut) => {
+        keys[shortcut] = commands[key]
+      })
+    }
+  }
+  return keymap(keys)
 }

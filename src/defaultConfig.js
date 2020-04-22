@@ -1,21 +1,23 @@
 export default {
   undo: {
-    className: 'fas fa-undo'
+    className: 'fas fa-undo',
+    shortcut: ['Mod-z']
   },
   redo: {
-    className: 'fas fa-redo'
+    className: 'fas fa-redo',
+    shortcuts: ['Shift-Mod-z']
   },
   bold: {
     className: 'fas fa-bold',
-    shortcuts: ['Mod-b', 'Mod-B']
+    shortcuts: ['Mod-b']
   },
   italic: {
     className: 'fas fa-italic',
-    shortcuts: ['Mod-i', 'Mod-I']
+    shortcuts: ['Mod-i']
   },
   strikethrough: {
     className: 'fas fa-strikethrough',
-    shortcuts: ['Mod-s', 'Mod-S']
+    shortcuts: ['Mod-s']
   },
   h1: {
     text: 'H1',
