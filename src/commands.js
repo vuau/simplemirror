@@ -70,7 +70,7 @@ const handleEnter = (state, dispatch, view) => {
   return false
 }
 
-export const createHardBreak = (state, dispatch) => {
+export const createHardBreak = chainCommands(exitCode, (state, dispatch) => {
   if (dispatch) {
     dispatch(
       state.tr
@@ -79,7 +79,7 @@ export const createHardBreak = (state, dispatch) => {
     )
   }
   return true
-}
+})
 
 export default {
   undo: undo,
