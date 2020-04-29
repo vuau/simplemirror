@@ -17730,13 +17730,13 @@
     return false;
   };
 
-  var createHardBreak = function createHardBreak(state, dispatch) {
+  var createHardBreak = chainCommands(exitCode, function (state, dispatch) {
     if (dispatch) {
       dispatch(state.tr.replaceSelectionWith(schema$1.nodes.hard_break.create()).scrollIntoView());
     }
 
     return true;
-  };
+  });
   var commands = {
     undo: undo,
     redo: redo,
@@ -18161,7 +18161,9 @@
     Tab: commands.indent,
     'Shift-Tab': commands.outdent,
     Enter: commands.enter,
-    'Shift-Enter': commands.enter,
+    'Mod-Enter': commands.break,
+    'Shift-Enter': commands.break,
+    'Ctrl-Enter': commands.break,
     Backspace: commands.backspace,
     'Mod-Backspace': commands.backspace,
     Delete: commands.delete,
