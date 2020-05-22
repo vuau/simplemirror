@@ -131,7 +131,7 @@
     if (typeof o === "string") return _arrayLikeToArray(o, minLen);
     var n = Object.prototype.toString.call(o).slice(8, -1);
     if (n === "Object" && o.constructor) n = o.constructor.name;
-    if (n === "Map" || n === "Set") return Array.from(n);
+    if (n === "Map" || n === "Set") return Array.from(o);
     if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
   }
 
@@ -8732,12 +8732,12 @@
     return event;
   }
 
-  function windowRect(win) {
+  function windowRect(doc) {
     return {
       left: 0,
-      right: win.innerWidth,
+      right: doc.documentElement.clientWidth,
       top: 0,
-      bottom: win.innerHeight
+      bottom: doc.documentElement.clientHeight
     };
   }
 
@@ -8745,11 +8745,21 @@
     return typeof value == "number" ? value : value[side];
   }
 
+  function clientRect(node) {
+    var rect = node.getBoundingClientRect(); // Make sure scrollbar width isn't included in the rectangle
+
+    return {
+      left: rect.left,
+      right: rect.left + node.clientWidth,
+      top: rect.top,
+      bottom: rect.top + node.clientHeight
+    };
+  }
+
   function scrollRectIntoView(view, rect, startDOM) {
     var scrollThreshold = view.someProp("scrollThreshold") || 0,
         scrollMargin = view.someProp("scrollMargin") || 5;
-    var doc = view.dom.ownerDocument,
-        win = doc.defaultView;
+    var doc = view.dom.ownerDocument;
 
     for (var parent = startDOM || view.dom;; parent = parentNode(parent)) {
       if (!parent) {
@@ -8761,7 +8771,7 @@
       }
 
       var atTop = parent == doc.body || parent.nodeType != 1;
-      var bounding = atTop ? windowRect(win) : parent.getBoundingClientRect();
+      var bounding = atTop ? windowRect(doc) : clientRect(parent);
       var moveX = 0,
           moveY = 0;
 
@@ -8779,7 +8789,7 @@
 
       if (moveX || moveY) {
         if (atTop) {
-          win.scrollBy(moveX, moveY);
+          doc.defaultView.scrollBy(moveX, moveY);
         } else {
           var startX = parent.scrollLeft,
               startY = parent.scrollTop;
@@ -9128,7 +9138,11 @@
     }
 
     var elt = root.elementFromPoint(coords.left, coords.top + 1),
-        pos;
+        pos; // Safari's caretRangeFromPoint returns nonsense when on a draggable element
+
+    if (result.safari && elt.draggable) {
+      node = offset = null;
+    }
 
     if (!elt || !view.dom.contains(elt.nodeType != 1 ? elt.parentNode : elt)) {
       var box = view.dom.getBoundingClientRect();
@@ -9327,7 +9341,7 @@
         view.updateState(viewState);
       }
 
-      if (active != view.dom) {
+      if (active != view.dom && active) {
         active.focus();
       }
     }
@@ -9450,6 +9464,9 @@
   // node-specific editing interfaces, you want more control over
   // the behavior of a node's in-editor representation, and need to
   // [define](#view.EditorProps.nodeViews) a custom node view.
+  //
+  // Mark views only support `dom` and `contentDOM`, and don't support
+  // any of the node view methods.
   //
   // Objects returned as node views must conform to this interface.
   //
@@ -9975,13 +9992,29 @@
     // browsers support it yet.
 
 
+    var domSelExtended = false;
+
     if (domSel.extend || anchor == head) {
       domSel.collapse(anchorDOM.node, anchorDOM.offset);
 
-      if (anchor != head) {
-        domSel.extend(headDOM.node, headDOM.offset);
+      try {
+        if (anchor != head) {
+          domSel.extend(headDOM.node, headDOM.offset);
+        }
+
+        domSelExtended = true;
+      } catch (err) {
+        // In some cases with Chrome the selection is empty after calling
+        // collapse, even when it should be valid. This appears to be a bug, but
+        // it is difficult to isolate. If this happens fallback to the old path
+        // without using extend.
+        if (!(err instanceof DOMException)) {
+          throw err;
+        }
       }
-    } else {
+    }
+
+    if (!domSelExtended) {
       if (anchor > head) {
         var tmp = anchorDOM;
         anchorDOM = headDOM;
@@ -11381,7 +11414,7 @@
         }
 
         return false;
-      } else {
+      } else if (!(result.mac && mods.indexOf("m") > -1)) {
         var $head = sel.$head,
             node = $head.textOffset ? null : dir < 0 ? $head.nodeBefore : $head.nodeAfter,
             desc;
@@ -11590,6 +11623,10 @@
       return false;
     }
 
+    if (result.mac && mods.indexOf("m") > -1) {
+      return false;
+    }
+
     var $from = sel.$from;
     var $to = sel.$to;
 
@@ -11775,7 +11812,7 @@
     var sel = view.state.selection;
     syncNodeSelection(view, sel);
 
-    if (view.editable ? !view.hasFocus() : !(hasSelection(view) && document.activeElement.contains(view.dom))) {
+    if (view.editable ? !view.hasFocus() : !(hasSelection(view) && document.activeElement && document.activeElement.contains(view.dom))) {
       return;
     }
 
@@ -12175,12 +12212,13 @@
 
     var $from = parse.doc.resolveNoCache(change.start - parse.from);
     var $to = parse.doc.resolveNoCache(change.endB - parse.from);
+    var inlineChange = $from.sameParent($to) && $from.parent.inlineContent;
     var nextSel; // If this looks like the effect of pressing Enter (or was recorded
     // as being an iOS enter press), just dispatch an Enter key instead.
 
-    if ((result.ios && view.lastIOSEnter > Date.now() - 100 && (!$from.sameParent($to) || addedNodes.some(function (n) {
-      return n.nodeName == "DIV";
-    })) || !$from.sameParent($to) && $from.pos < parse.doc.content.size && (nextSel = Selection.findFrom(parse.doc.resolve($from.pos + 1), 1, true)) && nextSel.head == $to.pos) && view.someProp("handleKeyDown", function (f) {
+    if ((result.ios && view.lastIOSEnter > Date.now() - 100 && (!inlineChange || addedNodes.some(function (n) {
+      return n.nodeName == "DIV" || n.nodeName == "P";
+    })) || !inlineChange && $from.pos < parse.doc.content.size && (nextSel = Selection.findFrom(parse.doc.resolve($from.pos + 1), 1, true)) && nextSel.head == $to.pos) && view.someProp("handleKeyDown", function (f) {
       return f(view, keyEvent(13, "Enter"));
     })) {
       view.lastIOSEnter = 0;
@@ -12203,7 +12241,7 @@
         chTo = change.endA;
     var tr, storedMarks, markChange, $from1;
 
-    if ($from.sameParent($to) && $from.parent.inlineContent) {
+    if (inlineChange) {
       if ($from.pos == $to.pos) {
         // Deletion
         // IE11 sometimes weirdly moves the DOM selection around after
@@ -13529,7 +13567,8 @@
       setSelectionOrigin(this.view, "pointer");
     } else if (handleSingleClick(this.view, pos.pos, pos.inside, event, this.selectNode)) {
       event.preventDefault();
-    } else if (this.flushed || // Chrome will sometimes treat a node selection as a
+    } else if (this.flushed || // Safari ignores clicks on draggable elements
+    result.safari && this.mightDrag && !this.mightDrag.node.isAtom || // Chrome will sometimes treat a node selection as a
     // cursor, but still report that the node is selected
     // when asked through getSelection. You'll then get a
     // situation where clicking at the point where that
@@ -13676,12 +13715,15 @@
   function captureCopy(view, dom) {
     // The extra wrapper is somehow necessary on IE/Edge to prevent the
     // content from being mangled when it is put onto the clipboard
-    var doc = view.dom.ownerDocument;
-    var wrap = doc.body.appendChild(doc.createElement("div"));
+    if (!view.dom.parentNode) {
+      return;
+    }
+
+    var wrap = view.dom.parentNode.appendChild(document.createElement("div"));
     wrap.appendChild(dom);
     wrap.style.cssText = "position: fixed; left: -10000px; top: 10px";
     var sel = getSelection(),
-        range = doc.createRange();
+        range = document.createRange();
     range.selectNodeContents(dom); // Done because IE will fire a selectionchange moving the selection
     // to its start when removeAllRanges is called and the editor still
     // has focus (which will mess up the editor's selection state).
@@ -13690,7 +13732,10 @@
     sel.removeAllRanges();
     sel.addRange(range);
     setTimeout(function () {
-      doc.body.removeChild(wrap);
+      if (wrap.parentNode) {
+        wrap.parentNode.removeChild(wrap);
+      }
+
       view.focus();
     }, 50);
   } // This is very crude, but unfortunately both these browsers _pretend_
@@ -13734,9 +13779,12 @@
   }
 
   function capturePaste(view, e) {
-    var doc = view.dom.ownerDocument;
+    if (!view.dom.parentNode) {
+      return;
+    }
+
     var plainText = view.shiftKey || view.state.selection.$from.parent.type.spec.code;
-    var target = doc.body.appendChild(doc.createElement(plainText ? "textarea" : "div"));
+    var target = view.dom.parentNode.appendChild(document.createElement(plainText ? "textarea" : "div"));
 
     if (!plainText) {
       target.contentEditable = "true";
@@ -13746,7 +13794,10 @@
     target.focus();
     setTimeout(function () {
       view.focus();
-      doc.body.removeChild(target);
+
+      if (target.parentNode) {
+        target.parentNode.removeChild(target);
+      }
 
       if (plainText) {
         doPaste(view, target.value, null, e);
@@ -14617,7 +14668,7 @@
 
         if (oldEnd >= children[i] + oldOffset) {
           children[i + 1] = -1;
-        } else if (dSize = newEnd - newStart - (oldEnd - oldStart) + (oldOffset - offset)) {
+        } else if (newStart >= offset && (dSize = newEnd - newStart - (oldEnd - oldStart))) {
           children[i] += dSize;
           children[i + 1] += dSize;
         }
@@ -16842,7 +16893,7 @@
   };
   var schema$1 = new Schema({
     nodes: addListNodes(schema.spec.nodes, 'paragraph block*', 'block'),
-    marks: _objectSpread2({}, marks, {
+    marks: _objectSpread2(_objectSpread2({}, marks), {}, {
       strikethrough: strikethrough
     })
   });
@@ -17010,14 +17061,23 @@
 
   function selectNodeBackward(state, dispatch, view) {
     var ref = state.selection;
-    var $cursor = ref.$cursor;
+    var $head = ref.$head;
+    var empty = ref.empty;
+    var $cut = $head;
 
-    if (!$cursor || (view ? !view.endOfTextblock("backward", state) : $cursor.parentOffset > 0)) {
+    if (!empty) {
       return false;
     }
 
-    var $cut = findCutBefore($cursor),
-        node = $cut && $cut.nodeBefore;
+    if ($head.parent.isTextblock) {
+      if (view ? !view.endOfTextblock("backward", state) : $head.parentOffset > 0) {
+        return false;
+      }
+
+      $cut = findCutBefore($head);
+    }
+
+    var node = $cut && $cut.nodeBefore;
 
     if (!node || !NodeSelection.isSelectable(node)) {
       return false;
@@ -17105,14 +17165,23 @@
 
   function selectNodeForward(state, dispatch, view) {
     var ref = state.selection;
-    var $cursor = ref.$cursor;
+    var $head = ref.$head;
+    var empty = ref.empty;
+    var $cut = $head;
 
-    if (!$cursor || (view ? !view.endOfTextblock("forward", state) : $cursor.parentOffset < $cursor.parent.content.size)) {
+    if (!empty) {
       return false;
     }
 
-    var $cut = findCutAfter($cursor),
-        node = $cut && $cut.nodeAfter;
+    if ($head.parent.isTextblock) {
+      if (view ? !view.endOfTextblock("forward", state) : $head.parentOffset < $head.parent.content.size) {
+        return false;
+      }
+
+      $cut = findCutAfter($head);
+    }
+
+    var node = $cut && $cut.nodeAfter;
 
     if (!node || !NodeSelection.isSelectable(node)) {
       return false;
@@ -18137,13 +18206,19 @@
         return true;
       }
 
-      if (isChar && (event.shiftKey || event.altKey || event.metaKey) && (baseName = base[event.keyCode]) && baseName != name) {
+      if (isChar && (event.shiftKey || event.altKey || event.metaKey || name.charCodeAt(0) > 127) && (baseName = base[event.keyCode]) && baseName != name) {
+        // Try falling back to the keyCode when there's a modifier
+        // active or the character produced isn't ASCII, and our table
+        // produces a different name from the the keyCode. See #668,
+        // #1060
         var fromCode = map[modifiers(baseName, event, true)];
 
         if (fromCode && fromCode(view.state, view.dispatch, view)) {
           return true;
         }
       } else if (isChar && event.shiftKey) {
+        // Otherwise, if shift is active, also try the binding with the
+        // Shift- prefix enabled. See #997
         var withShift = map[modifiers(name, event, true)];
 
         if (withShift && withShift(view.state, view.dispatch, view)) {
