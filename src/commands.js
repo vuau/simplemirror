@@ -60,7 +60,11 @@ const handleEnter = (state, dispatch, view) => {
     }
   } else {
     if (grandParent.textContent) {
-      command = splitListItem(schema.nodes.list_item)
+      if ($from.node().type === schema.nodes.code_block) {
+        command = newlineInCode
+      } else {
+        command = splitListItem(schema.nodes.list_item)
+      }
     } else {
       // is in list but without text
       command = liftListItem(schema.nodes.list_item)
