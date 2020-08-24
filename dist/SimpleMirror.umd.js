@@ -17788,7 +17788,11 @@
       }
     } else {
       if (grandParent.textContent) {
-        command = splitListItem(schema$1.nodes.list_item);
+        if ($from.node().type === schema$1.nodes.code_block) {
+          command = newlineInCode;
+        } else {
+          command = splitListItem(schema$1.nodes.list_item);
+        }
       } else {
         // is in list but without text
         command = liftListItem(schema$1.nodes.list_item);
