@@ -8,6 +8,7 @@ import defaultConfig from './defaultConfig'
 import { createMenu } from './menu'
 import { createKeymaps } from './keymaps'
 import { createInputRules } from './inputRules'
+import { placeholderPlugin } from './plugins/placeholder'
 
 import 'prosemirror-view/style/prosemirror.css'
 import './main.css'
@@ -48,7 +49,13 @@ class SimpleMirror {
 
     const state = EditorState.create({
       doc: DOMParser.fromSchema(schema).parse(node),
-      plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history()]
+      plugins: [
+        this.menuPlugin,
+        this.keymapPlugin,
+        this.inputRulePlugin,
+        history(),
+        placeholderPlugin
+      ]
     })
     return state
   }

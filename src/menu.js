@@ -15,7 +15,7 @@ class MenuView {
         }
         return null
       })
-      .filter((item) => item)
+      .filter(item => item)
 
     this.update()
   }
@@ -25,7 +25,7 @@ class MenuView {
     span.className = 'menuitem ' + className
     span.title = text || ''
     span.textContent = text
-    span.addEventListener('mousedown', (e) => {
+    span.addEventListener('mousedown', e => {
       e.preventDefault()
       this.editorView.focus()
       command(this.editorView.state, this.editorView.dispatch, this.editorView)

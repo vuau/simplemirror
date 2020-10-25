@@ -62,5 +62,8 @@ export default {
   code: {
     className: 'fas fa-code',
     inputRule: /^```$/
+  },
+  insertImage: {
+    className: 'fas fa-image'
   }
 }

@@ -25,6 +25,7 @@ import {
   sinkListItem
 } from 'prosemirror-schema-list'
 import { undo, redo } from 'prosemirror-history'
+import { uploadFile } from './utils'
 
 const backspace = chainCommands(
   deleteSelection,
@@ -85,6 +86,32 @@ export const createHardBreak = chainCommands(exitCode, (state, dispatch) => {
   return true
 })
 
+export const insertImage = (state, dispatch, view) => {
+  if (dispatch) {
+    if (!navigator.onLine) {
+      window.alert('You need to be online to upload file')
+    } else {
+      const fileInputDOM = document.createElement('div')
+      let imgFile
+      const onChangeFile = e => {
+        imgFile = e.target.files[0]
+      }
+      const onUploadFile = () => uploadFile(view, imgFile)
+      fileInputDOM.className = 'menuPopover'
+      fileInputDOM.innerHTML =
+        '<input type="file" id="avatar" name="avatar" accept="image/png, image/jpeg"><button>Upload</button>'
+      fileInputDOM
+        .querySelector('input')
+        .addEventListener('change', onChangeFile)
+      fileInputDOM
+        .querySelector('button')
+        .addEventListener('click', onUploadFile)
+      view.dom.parentNode.appendChild(fileInputDOM)
+    }
+  }
+  return true
+}
+
 export default {
   undo: undo,
   redo: redo,
@@ -108,5 +135,6 @@ export default {
   exit: exitCode,
   backspace: backspace,
   delete: del,
-  selectAll: selectAll
+  selectAll: selectAll,
+  insertImage: insertImage
 }
