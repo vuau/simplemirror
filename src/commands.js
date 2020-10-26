@@ -25,7 +25,7 @@ import {
   sinkListItem
 } from 'prosemirror-schema-list'
 import { undo, redo } from 'prosemirror-history'
-import { uploadFile } from './utils'
+import { loadScript, showUploadWidget, injectFileToView } from './utils'
 
 const backspace = chainCommands(
   deleteSelection,
@@ -86,27 +86,19 @@ export const createHardBreak = chainCommands(exitCode, (state, dispatch) => {
   return true
 })
 
-export const insertImage = (state, dispatch, view) => {
+export const insertImage = (state, dispatch, view, options) => {
+  console.log(options)
   if (dispatch) {
     if (!navigator.onLine) {
       window.alert('You need to be online to upload file')
     } else {
-      const fileInputDOM = document.createElement('div')
-      let imgFile
-      const onChangeFile = e => {
-        imgFile = e.target.files[0]
+      if (window.cloudinary) {
+        showUploadWidget().then(url => injectFileToView(view, url))
+      } else {
+        loadScript('https://widget.cloudinary.com/v2.0/global/all.js')
+          .then(showUploadWidget)
+          .then(url => injectFileToView(view, url))
       }
-      const onUploadFile = () => uploadFile(view, imgFile)
-      fileInputDOM.className = 'menuPopover'
-      fileInputDOM.innerHTML =
-        '<input type="file" id="avatar" name="avatar" accept="image/png, image/jpeg"><button>Upload</button>'
-      fileInputDOM
-        .querySelector('input')
-        .addEventListener('change', onChangeFile)
-      fileInputDOM
-        .querySelector('button')
-        .addEventListener('click', onUploadFile)
-      view.dom.parentNode.appendChild(fileInputDOM)
     }
   }
   return true

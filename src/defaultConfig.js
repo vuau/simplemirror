@@ -64,6 +64,12 @@ export default {
     inputRule: /^```$/
   },
   insertImage: {
-    className: 'fas fa-image'
+    className: 'fas fa-image',
+    options: {
+      cloudinary: {
+        cloudName: 'pvaklb',
+        uploadPreset: 'cqdpmj8p'
+      }
+    }
   }
 }
