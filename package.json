@@ -1,6 +1,6 @@
 {
   "name": "simplemirror",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "A simple and easy to use WYSIWYWG editor based on ProseMirror",
   "repository": {
     "type": "git",

@@ -19,10 +19,10 @@ import {
   selectAll
 } from 'prosemirror-commands'
 import {
-  splitListItem,
   wrapInList,
   liftListItem,
-  sinkListItem
+  sinkListItem,
+  splitListItem
 } from 'prosemirror-schema-list'
 import { undo, redo } from 'prosemirror-history'
 import { loadScript, showUploadWidget, injectFileToView } from './utils'
@@ -87,16 +87,17 @@ export const createHardBreak = chainCommands(exitCode, (state, dispatch) => {
 })
 
 export const insertImage = (state, dispatch, view, options) => {
-  console.log(options)
   if (dispatch) {
-    if (!navigator.onLine) {
-      window.alert('You need to be online to upload file')
+    if (!navigator.onLine || !options.cloudinary) {
+      console.log('You need to be online to upload file')
+      const url = prompt('Input image URL')
+      injectFileToView(view, url)
     } else {
       if (window.cloudinary) {
-        showUploadWidget().then(url => injectFileToView(view, url))
+        showUploadWidget(options.cloudinary).then(url => injectFileToView(view, url))
       } else {
         loadScript('https://widget.cloudinary.com/v2.0/global/all.js')
-          .then(showUploadWidget)
+          .then(() => showUploadWidget(options.cloudinary))
           .then(url => injectFileToView(view, url))
       }
     }

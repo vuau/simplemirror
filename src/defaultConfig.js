@@ -68,7 +68,8 @@ export default {
     options: {
       cloudinary: {
         cloudName: 'pvaklb',
-        uploadPreset: 'cqdpmj8p'
+        uploadPreset: 'cqdpmj8p',
+        googleApiKey: 'AIzaSyBjP3tOONJ4O2-rpYFXAH-lReiP0Qh6qMU'
       }
     }
   }

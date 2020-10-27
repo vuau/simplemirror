@@ -31,19 +31,19 @@ export const loadScript = src => {
   })
 }
 
-export const showUploadWidget = () =>
+export const showUploadWidget = (options) =>
   new Promise((resolve, reject) => {
     const uploadWidget = window.cloudinary.createUploadWidget(
       {
-        cloudName: 'pvaklb',
-        uploadPreset: 'cqdpmj8p'
+        multiple: false,
+        sources: ['local', 'url', 'camera', 'image_search'],
+        ...options
       },
       (error, result) => {
         if (error) {
           throw error
         }
         if (result && result.event === 'success') {
-          console.log('Done! Here is the image info: ', result.info)
           resolve(result.info.url)
         }
       }

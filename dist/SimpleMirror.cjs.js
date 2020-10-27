@@ -1075,7 +1075,7 @@ Slice.fromJSON = function fromJSON(schema, json) {
     throw new RangeError("Invalid input for Slice.fromJSON");
   }
 
-  return new Slice(Fragment.fromJSON(schema, json.content), json.openStart || 0, json.openEnd || 0);
+  return new Slice(Fragment.fromJSON(schema, json.content), openStart, openEnd);
 }; // :: (Fragment, ?bool) → Slice
 // Create a slice from a fragment by taking the maximum possible
 // open value on both side of the fragment.
@@ -1456,6 +1456,21 @@ prototypeAccessors$2.nodeBefore.get = function () {
   }
 
   return index == 0 ? null : this.parent.child(index - 1);
+}; // :: (number, ?number) → number
+// Get the position at the given index in the parent node at the
+// given depth (which defaults to `this.depth`).
+
+
+ResolvedPos.prototype.posAtIndex = function posAtIndex(index, depth) {
+  depth = this.resolveDepth(depth);
+  var node = this.path[depth * 3],
+      pos = depth == 0 ? 0 : this.path[depth * 3 - 1] + 1;
+
+  for (var i = 0; i < index; i++) {
+    pos += node.child(i).nodeSize;
+  }
+
+  return pos;
 }; // :: () → [Mark]
 // Get the marks at this position, factoring in the surrounding
 // marks' [`inclusive`](#model.MarkSpec.inclusive) property. If the
@@ -2016,8 +2031,8 @@ Node.prototype.resolve = function resolve(pos) {
 
 Node.prototype.resolveNoCache = function resolveNoCache(pos) {
   return ResolvedPos.resolve(this, pos);
-}; // :: (number, number, MarkType) → bool
-// Test whether a mark of the given type occurs in this document
+}; // :: (number, number, union<Mark, MarkType>) → bool
+// Test whether a given mark or mark type occurs in this document
 // between the two given positions.
 
 
@@ -2936,7 +2951,7 @@ function checkForDeadEnds(match, stream) {
     }
 
     if (dead) {
-      stream.err("Only non-generatable nodes (" + nodes.join(", ") + ") in a required position");
+      stream.err("Only non-generatable nodes (" + nodes.join(", ") + ") in a required position (see https://prosemirror.net/docs/guide/#generatable)");
     }
   }
 } // For node types where all attrs have a default value (or which don't
@@ -3685,7 +3700,7 @@ function gatherMarks(schema, marks) {
 //   A CSS property name to match. When given, this rule matches
 //   inline styles that list that property. May also have the form
 //   `"property=value"`, in which case the rule only matches if the
-//   propery's value exactly matches the given value. (For more
+//   property's value exactly matches the given value. (For more
 //   complicated filters, use [`getAttrs`](#model.ParseRule.getAttrs)
 //   and return false to indicate that the match failed.)
 //
@@ -3722,6 +3737,10 @@ function gatherMarks(schema, marks) {
 //
 //   ignore:: ?bool
 //   When true, ignore content that matches this rule.
+//
+//   closeParent:: ?bool
+//   When true, finding an element that matches this rule will close
+//   the current node.
 //
 //   skip:: ?bool
 //   When true, ignore the node that matches this rule, but do parse
@@ -3782,6 +3801,15 @@ var DOMParser = function DOMParser(schema, rules) {
     } else if (rule.style) {
       this$1.styles.push(rule);
     }
+  }); // Only normalize list elements when lists in the schema can't directly contain themselves
+
+  this.normalizeLists = !this.tags.some(function (r) {
+    if (!/^(ul|ol)\b/.test(r.tag) || !r.node) {
+      return false;
+    }
+
+    var node = schema.nodes[r.node];
+    return node.contentMatch.matchType(node);
   });
 }; // :: (dom.Node, ?ParseOptions) → Node
 // Parse a document from the content of a DOM node.
@@ -3984,7 +4012,9 @@ var NodeContext = function NodeContext(type, attrs, marks, pendingMarks, solid, 
 
   this.activeMarks = Mark.none; // Marks that can't apply here, but will be used in children if possible
 
-  this.pendingMarks = pendingMarks;
+  this.pendingMarks = pendingMarks; // Nested Marks with same type
+
+  this.stashMarks = [];
 };
 
 NodeContext.prototype.findWrapping = function findWrapping(node) {
@@ -4037,11 +4067,25 @@ NodeContext.prototype.finish = function finish(openEnd) {
   return this.type ? this.type.create(this.attrs, content, this.marks) : content;
 };
 
+NodeContext.prototype.popFromStashMark = function popFromStashMark(markType) {
+  for (var i = this.stashMarks.length - 1; i >= 0; i--) {
+    if (this.stashMarks[i].type == markType) {
+      return this.stashMarks.splice(i, 1)[0];
+    }
+  }
+};
+
 NodeContext.prototype.applyPending = function applyPending(nextType) {
   for (var i = 0, pending = this.pendingMarks; i < pending.length; i++) {
     var mark = pending[i];
 
     if ((this.type ? this.type.allowsMarkType(mark.type) : markMayApply(mark.type, nextType)) && !mark.isInSet(this.activeMarks)) {
+      var found = findSameTypeInSet(mark, this.activeMarks);
+
+      if (found) {
+        this.stashMarks.push(found);
+      }
+
       this.activeMarks = mark.addToSet(this.activeMarks);
       this.pendingMarks = mark.removeFromSet(this.pendingMarks);
     }
@@ -4152,7 +4196,7 @@ ParseContext.prototype.addTextNode = function addTextNode(dom) {
 ParseContext.prototype.addElement = function addElement(dom) {
   var name = dom.nodeName.toLowerCase();
 
-  if (listTags.hasOwnProperty(name)) {
+  if (listTags.hasOwnProperty(name) && this.parser.normalizeLists) {
     normalizeList(dom);
   }
 
@@ -4160,8 +4204,10 @@ ParseContext.prototype.addElement = function addElement(dom) {
 
   if (rule ? rule.ignore : ignoreTags.hasOwnProperty(name)) {
     this.findInside(dom);
-  } else if (!rule || rule.skip) {
-    if (rule && rule.skip.nodeType) {
+  } else if (!rule || rule.skip || rule.closeParent) {
+    if (rule && rule.closeParent) {
+      this.open = Math.max(0, this.open - 1);
+    } else if (rule && rule.skip.nodeType) {
       dom = rule.skip;
     }
 
@@ -4563,6 +4609,12 @@ ParseContext.prototype.textblockFromContext = function textblockFromContext() {
 };
 
 ParseContext.prototype.addPendingMark = function addPendingMark(mark) {
+  var found = findSameTypeInSet(mark, this.top.pendingMarks);
+
+  if (found) {
+    this.top.stashMarks.push(found);
+  }
+
   this.top.pendingMarks = mark.addToSet(this.top.pendingMarks);
 };
 
@@ -4575,6 +4627,11 @@ ParseContext.prototype.removePendingMark = function removePendingMark(mark, upto
       level.pendingMarks = mark.removeFromSet(level.pendingMarks);
     } else {
       level.activeMarks = mark.removeFromSet(level.activeMarks);
+      var stashMark = level.popFromStashMark(mark.type);
+
+      if (stashMark) {
+        level.activeMarks = stashMark.addToSet(level.activeMarks);
+      }
     }
 
     if (level == upto) {
@@ -4674,10 +4731,18 @@ function markMayApply(markType, nodeType) {
     var returned = loop(name);
     if (returned) return returned.v;
   }
+}
+
+function findSameTypeInSet(mark, set) {
+  for (var i = 0; i < set.length; i++) {
+    if (mark.type == set[i].type) {
+      return set[i];
+    }
+  }
 } // DOMOutputSpec:: interface
 // A description of a DOM structure. Can be either a string, which is
 // interpreted as a text node, a DOM node, which is interpreted as
-// itself, or an array.
+// itself, a `{dom: Node, contentDOM: ?Node}` object, or an array.
 //
 // An array describes a DOM element. The first value in the array
 // should be a string—the name of the DOM element, optionally prefixed
@@ -4832,6 +4897,10 @@ DOMSerializer.renderSpec = function renderSpec(doc, structure, xmlNS) {
     return {
       dom: structure
     };
+  }
+
+  if (structure.dom && structure.dom.nodeType != null) {
+    return structure;
   }
 
   var tagName = structure[0],
@@ -5058,7 +5127,7 @@ StepMap.prototype._map = function _map(pos, assoc, simple) {
         return result;
       }
 
-      var recover = makeRecover(i / 3, pos - start);
+      var recover = pos == (assoc < 0 ? start : end) ? null : makeRecover(i / 3, pos - start);
       return new MapResult(result, assoc < 0 ? pos != start : pos != end, recover);
     }
 
@@ -5251,31 +5320,19 @@ Mapping.prototype.mapResult = function mapResult(pos, assoc) {
 };
 
 Mapping.prototype._map = function _map(pos, assoc, simple) {
-  var deleted = false,
-      recoverables = null;
+  var deleted = false;
 
   for (var i = this.from; i < this.to; i++) {
     var map = this.maps[i],
-        rec = recoverables && recoverables[i];
-
-    if (rec != null && map.touches(pos, rec)) {
-      pos = map.recover(rec);
-      continue;
-    }
-
-    var result = map.mapResult(pos, assoc);
+        result = map.mapResult(pos, assoc);
 
     if (result.recover != null) {
       var corr = this.getMirror(i);
 
       if (corr != null && corr > i && corr < this.to) {
-        if (result.deleted) {
-          i = corr;
-          pos = this.maps[corr].recover(result.recover);
-          continue;
-        } else {
-          (recoverables || (recoverables = Object.create(null)))[corr] = result.recover;
-        }
+        i = corr;
+        pos = this.maps[corr].recover(result.recover);
+        continue;
       }
     }
 
@@ -6444,30 +6501,7 @@ function replaceStep(doc, from, to, slice) {
     return new ReplaceStep(from, to, slice);
   }
 
-  var placed = placeSlice($from, slice);
-  var fittedLeft = fitLeft($from, placed);
-  var fitted = fitRight($from, $to, fittedLeft);
-
-  if (!fitted) {
-    return null;
-  }
-
-  if (fittedLeft.size != fitted.size && canMoveText($from, $to, fittedLeft)) {
-    var d = $to.depth,
-        after = $to.after(d);
-
-    while (d > 1 && after == $to.end(--d)) {
-      ++after;
-    }
-
-    var fittedAfter = fitRight($from, doc.resolve(after), fittedLeft);
-
-    if (fittedAfter) {
-      return new ReplaceAroundStep(from, after, to, $to.end(), fittedAfter, fittedLeft.size);
-    }
-  }
-
-  return fitted.size || from != to ? new ReplaceStep(from, to, fitted) : null;
+  return new Fitter($from, $to, slice).fit();
 } // :: (number, ?number, ?Slice) → this
 // Replace the part of the document between `from` and `to` with the
 // given `slice`.
@@ -6504,211 +6538,8 @@ Transform.prototype.insert = function (pos, content) {
   return this.replaceWith(pos, pos, content);
 };
 
-function fitLeftInner($from, depth, placed, placedBelow) {
-  var content = Fragment.empty,
-      openEnd = 0,
-      placedHere = placed[depth];
-
-  if ($from.depth > depth) {
-    var inner = fitLeftInner($from, depth + 1, placed, placedBelow || placedHere);
-    openEnd = inner.openEnd + 1;
-    content = Fragment.from($from.node(depth + 1).copy(inner.content));
-  }
-
-  if (placedHere) {
-    content = content.append(placedHere.content);
-    openEnd = placedHere.openEnd;
-  }
-
-  if (placedBelow) {
-    content = content.append($from.node(depth).contentMatchAt($from.indexAfter(depth)).fillBefore(Fragment.empty, true));
-    openEnd = 0;
-  }
-
-  return {
-    content: content,
-    openEnd: openEnd
-  };
-}
-
-function fitLeft($from, placed) {
-  var ref = fitLeftInner($from, 0, placed, false);
-  var content = ref.content;
-  var openEnd = ref.openEnd;
-  return new Slice(content, $from.depth, openEnd || 0);
-}
-
-function fitRightJoin(content, parent, $from, $to, depth, openStart, openEnd) {
-  var match,
-      count = content.childCount,
-      matchCount = count - (openEnd > 0 ? 1 : 0);
-  var parentNode = openStart < 0 ? parent : $from.node(depth);
-
-  if (openStart < 0) {
-    match = parentNode.contentMatchAt(matchCount);
-  } else if (count == 1 && openEnd > 0) {
-    match = parentNode.contentMatchAt(openStart ? $from.index(depth) : $from.indexAfter(depth));
-  } else {
-    match = parentNode.contentMatchAt($from.indexAfter(depth)).matchFragment(content, count > 0 && openStart ? 1 : 0, matchCount);
-  }
-
-  var toNode = $to.node(depth);
-
-  if (openEnd > 0 && depth < $to.depth) {
-    var after = toNode.content.cutByIndex($to.indexAfter(depth)).addToStart(content.lastChild);
-    var joinable$1 = match.fillBefore(after, true); // Can't insert content if there's a single node stretched across this gap
-
-    if (joinable$1 && joinable$1.size && openStart > 0 && count == 1) {
-      joinable$1 = null;
-    }
-
-    if (joinable$1) {
-      var inner = fitRightJoin(content.lastChild.content, content.lastChild, $from, $to, depth + 1, count == 1 ? openStart - 1 : -1, openEnd - 1);
-
-      if (inner) {
-        var last = content.lastChild.copy(inner);
-
-        if (joinable$1.size) {
-          return content.cutByIndex(0, count - 1).append(joinable$1).addToEnd(last);
-        } else {
-          return content.replaceChild(count - 1, last);
-        }
-      }
-    }
-  }
-
-  if (openEnd > 0) {
-    match = match.matchType((count == 1 && openStart > 0 ? $from.node(depth + 1) : content.lastChild).type);
-  } // If we're here, the next level can't be joined, so we see what
-  // happens if we leave it open.
-
-
-  var toIndex = $to.index(depth);
-
-  if (toIndex == toNode.childCount && !toNode.type.compatibleContent(parent.type)) {
-    return null;
-  }
-
-  var joinable = match.fillBefore(toNode.content, true, toIndex);
-
-  for (var i = toIndex; joinable && i < toNode.content.childCount; i++) {
-    if (!parentNode.type.allowsMarks(toNode.content.child(i).marks)) {
-      joinable = null;
-    }
-  }
-
-  if (!joinable) {
-    return null;
-  }
-
-  if (openEnd > 0) {
-    var closed = fitRightClosed(content.lastChild, openEnd - 1, $from, depth + 1, count == 1 ? openStart - 1 : -1);
-    content = content.replaceChild(count - 1, closed);
-  }
-
-  content = content.append(joinable);
-
-  if ($to.depth > depth) {
-    content = content.addToEnd(fitRightSeparate($to, depth + 1));
-  }
-
-  return content;
-}
-
-function fitRightClosed(node, openEnd, $from, depth, openStart) {
-  var match,
-      content = node.content,
-      count = content.childCount;
-
-  if (openStart >= 0) {
-    match = $from.node(depth).contentMatchAt($from.indexAfter(depth)).matchFragment(content, openStart > 0 ? 1 : 0, count);
-  } else {
-    match = node.contentMatchAt(count);
-  }
-
-  if (openEnd > 0) {
-    var closed = fitRightClosed(content.lastChild, openEnd - 1, $from, depth + 1, count == 1 ? openStart - 1 : -1);
-    content = content.replaceChild(count - 1, closed);
-  }
-
-  return node.copy(content.append(match.fillBefore(Fragment.empty, true)));
-}
-
-function fitRightSeparate($to, depth) {
-  var node = $to.node(depth);
-  var fill = node.contentMatchAt(0).fillBefore(node.content, true, $to.index(depth));
-
-  if ($to.depth > depth) {
-    fill = fill.addToEnd(fitRightSeparate($to, depth + 1));
-  }
-
-  return node.copy(fill);
-}
-
-function normalizeSlice(content, openStart, openEnd) {
-  while (openStart > 0 && openEnd > 0 && content.childCount == 1) {
-    content = content.firstChild.content;
-    openStart--;
-    openEnd--;
-  }
-
-  return new Slice(content, openStart, openEnd);
-} // : (ResolvedPos, ResolvedPos, number, Slice) → Slice
-
-
-function fitRight($from, $to, slice) {
-  var fitted = fitRightJoin(slice.content, $from.node(0), $from, $to, 0, slice.openStart, slice.openEnd);
-
-  if (!fitted) {
-    return null;
-  }
-
-  return normalizeSlice(fitted, slice.openStart, $to.depth);
-}
-
 function fitsTrivially($from, $to, slice) {
   return !slice.openStart && !slice.openEnd && $from.start() == $to.start() && $from.parent.canReplace($from.index(), $to.index(), slice.content);
-}
-
-function canMoveText($from, $to, slice) {
-  if (!$to.parent.isTextblock) {
-    return false;
-  }
-
-  var parent = slice.openEnd ? nodeRight(slice.content, slice.openEnd) : $from.node($from.depth - (slice.openStart - slice.openEnd));
-
-  if (!parent.isTextblock) {
-    return false;
-  }
-
-  for (var i = $to.index(); i < $to.parent.childCount; i++) {
-    if (!parent.type.allowsMarks($to.parent.child(i).marks)) {
-      return false;
-    }
-  }
-
-  var match;
-
-  if (slice.openEnd) {
-    match = parent.contentMatchAt(parent.childCount);
-  } else {
-    match = parent.contentMatchAt(parent.childCount);
-
-    if (slice.size) {
-      match = match.matchFragment(slice.content, slice.openStart ? 1 : 0);
-    }
-  }
-
-  match = match.matchFragment($to.parent.content, $to.index());
-  return match && match.validEnd;
-}
-
-function nodeRight(content, depth) {
-  for (var i = 1; i < depth; i++) {
-    content = content.lastChild.content;
-  }
-
-  return content.lastChild;
 } // Algorithm for 'placing' the elements of a slice into a gap:
 //
 // We consider the content of each node that is open to the left to be
@@ -6716,240 +6547,449 @@ function nodeRight(content, depth) {
 // paragraph on the left is open, "foo" can be placed (somewhere on
 // the left side of the replacement gap) independently from p("bar").
 //
-// So placeSlice splits up a slice into a number of sub-slices,
-// along with information on where they can be placed on the given
-// left-side edge. It works by walking the open side of the slice,
-// from the inside out, and trying to find a landing spot for each
-// element, by simultaneously scanning over the gap side. When no
-// place is found for an open node's content, it is left in that node.
-// : (ResolvedPos, Slice) → [{content: Fragment, openEnd: number, depth: number}]
+// This class tracks the state of the placement progress in the
+// following properties:
+//
+//  - `frontier` holds a stack of `{type, match}` objects that
+//    represent the open side of the replacement. It starts at
+//    `$from`, then moves forward as content is placed, and is finally
+//    reconciled with `$to`.
+//
+//  - `unplaced` is a slice that represents the content that hasn't
+//    been placed yet.
+//
+//  - `placed` is a fragment of placed content. Its open-start value
+//    is implicit in `$from`, and its open-end value in `frontier`.
 
 
-function placeSlice($from, slice) {
-  var frontier = new Frontier($from);
+var Fitter = function Fitter($from, $to, slice) {
+  this.$to = $to;
+  this.$from = $from;
+  this.unplaced = slice;
+  this.frontier = [];
 
-  for (var pass = 1; slice.size && pass <= 3; pass++) {
-    var value = frontier.placeSlice(slice.content, slice.openStart, slice.openEnd, pass);
-
-    if (pass == 3 && value != slice && value.size) {
-      pass = 0;
-    } // Restart if the 3rd pass made progress but left content
-
-
-    slice = value;
-  }
-
-  while (frontier.open.length) {
-    frontier.closeNode();
-  }
-
-  return frontier.placed;
-} // Helper class that models the open side of the insert position,
-// keeping track of the content match and already inserted content
-// at each depth.
-
-
-var Frontier = function Frontier($pos) {
-  // : [{parent: Node, match: ContentMatch, content: Fragment, wrapper: bool, openEnd: number, depth: number}]
-  this.open = [];
-
-  for (var d = 0; d <= $pos.depth; d++) {
-    var parent = $pos.node(d),
-        match = parent.contentMatchAt($pos.indexAfter(d));
-    this.open.push({
-      parent: parent,
-      match: match,
-      content: Fragment.empty,
-      wrapper: false,
-      openEnd: 0,
-      depth: d
+  for (var i = 0; i <= $from.depth; i++) {
+    var node = $from.node(i);
+    this.frontier.push({
+      type: node.type,
+      match: node.contentMatchAt($from.indexAfter(i))
     });
   }
 
-  this.placed = [];
-}; // : (Fragment, number, number, number, ?Node) → Slice
-// Tries to place the content of the given slice, and returns a
-// slice containing unplaced content.
-//
-// pass 1: try to fit directly
-// pass 2: allow wrapper nodes to be introduced
-// pass 3: allow unwrapping of nodes that aren't open
+  this.placed = Fragment.empty;
+
+  for (var i$1 = $from.depth; i$1 > 0; i$1--) {
+    this.placed = Fragment.from($from.node(i$1).copy(this.placed));
+  }
+};
+
+var prototypeAccessors$1$4 = {
+  depth: {
+    configurable: true
+  }
+};
+
+prototypeAccessors$1$4.depth.get = function () {
+  return this.frontier.length - 1;
+};
+
+Fitter.prototype.fit = function fit() {
+  // As long as there's unplaced content, try to place some of it.
+  // If that fails, either increase the open score of the unplaced
+  // slice, or drop nodes from it, and then try again.
+  while (this.unplaced.size) {
+    var fit = this.findFittable();
+
+    if (fit) {
+      this.placeNodes(fit);
+    } else {
+      this.openMore() || this.dropNode();
+    }
+  } // When there's inline content directly after the frontier _and_
+  // directly after `this.$to`, we must generate a `ReplaceAround`
+  // step that pulls that content into the node after the frontier.
+  // That means the fitting must be done to the end of the textblock
+  // node after `this.$to`, not `this.$to` itself.
 
 
-Frontier.prototype.placeSlice = function placeSlice(fragment, openStart, openEnd, pass, parent) {
-  if (openStart > 0) {
-    var first = fragment.firstChild;
-    var inner = this.placeSlice(first.content, Math.max(0, openStart - 1), openEnd && fragment.childCount == 1 ? openEnd - 1 : 0, pass, first);
+  var moveInline = this.mustMoveInline(),
+      placedSize = this.placed.size - this.depth - this.$from.depth;
+  var $from = this.$from,
+      $to = this.close(moveInline < 0 ? this.$to : $from.doc.resolve(moveInline));
 
-    if (inner.content != first.content) {
-      if (inner.content.size) {
-        fragment = fragment.replaceChild(0, first.copy(inner.content));
-        openStart = inner.openStart + 1;
+  if (!$to) {
+    return null;
+  } // If closing to `$to` succeeded, create a step
+
+
+  var content = this.placed,
+      openStart = $from.depth,
+      openEnd = $to.depth;
+
+  while (openStart && openEnd && content.childCount == 1) {
+    // Normalize by dropping open parent nodes
+    content = content.firstChild.content;
+    openStart--;
+    openEnd--;
+  }
+
+  var slice = new Slice(content, openStart, openEnd);
+
+  if (moveInline > -1) {
+    return new ReplaceAroundStep($from.pos, moveInline, this.$to.pos, this.$to.end(), slice, placedSize);
+  }
+
+  if (slice.size || $from.pos != this.$to.pos) // Don't generate no-op steps
+    {
+      return new ReplaceStep($from.pos, $to.pos, slice);
+    }
+}; // Find a position on the start spine of `this.unplaced` that has
+// content that can be moved somewhere on the frontier. Returns two
+// depths, one for the slice and one for the frontier.
+
+
+Fitter.prototype.findFittable = function findFittable() {
+  // Only try wrapping nodes (pass 2) after finding a place without
+  // wrapping failed.
+  for (var pass = 1; pass <= 2; pass++) {
+    for (var sliceDepth = this.unplaced.openStart; sliceDepth >= 0; sliceDepth--) {
+      var fragment = void 0,
+          parent = void 0;
+
+      if (sliceDepth) {
+        parent = contentAt(this.unplaced.content, sliceDepth - 1).firstChild;
+        fragment = parent.content;
       } else {
-        if (fragment.childCount == 1) {
-          openEnd = 0;
-        }
-
-        fragment = fragment.cutByIndex(1);
-        openStart = 0;
+        fragment = this.unplaced.content;
       }
-    }
-  }
 
-  var result = this.placeContent(fragment, openStart, openEnd, pass, parent);
+      var first = fragment.firstChild;
 
-  if (pass > 2 && result.size && openStart == 0) {
-    var child = result.content.firstChild,
-        single = result.content.childCount == 1;
-    this.placeContent(child.content, 0, openEnd && single ? openEnd - 1 : 0, pass, child);
-    result = single ? Fragment.empty : new Slice(result.content.cutByIndex(1), 0, openEnd);
-  }
+      for (var frontierDepth = this.depth; frontierDepth >= 0; frontierDepth--) {
+        var ref = this.frontier[frontierDepth];
+        var type = ref.type;
+        var match = ref.match;
+        var wrap = void 0,
+            inject = void 0; // In pass 1, if the next node matches, or there is no next
+        // node but the parents look compatible, we've found a
+        // place.
 
-  return result;
-};
-
-Frontier.prototype.placeContent = function placeContent(fragment, openStart, openEnd, pass, parent) {
-  var i = 0; // Go over the fragment's children
-
-  for (; i < fragment.childCount; i++) {
-    var child = fragment.child(i),
-        placed = false,
-        last = i == fragment.childCount - 1; // Try each open node in turn, starting from the innermost
-
-    for (var d = this.open.length - 1; d >= 0; d--) {
-      var open = this.open[d],
-          wrap = void 0; // If pass > 1, it is allowed to wrap the node to help find a
-      // fit, so if findWrapping returns something, we add open
-      // nodes to the frontier for that wrapping.
-
-      if (pass > 1 && (wrap = open.match.findWrapping(child.type)) && !(parent && wrap.length && wrap[wrap.length - 1] == parent.type)) {
-        while (this.open.length - 1 > d) {
-          this.closeNode();
-        }
-
-        for (var w = 0; w < wrap.length; w++) {
-          open.match = open.match.matchType(wrap[w]);
-          d++;
-          open = {
-            parent: wrap[w].create(),
-            match: wrap[w].contentMatch,
-            content: Fragment.empty,
-            wrapper: true,
-            openEnd: 0,
-            depth: d + w
+        if (pass == 1 && (first ? match.matchType(first.type) || (inject = match.fillBefore(Fragment.from(first), false)) : type.compatibleContent(parent.type))) {
+          return {
+            sliceDepth: sliceDepth,
+            frontierDepth: frontierDepth,
+            parent: parent,
+            inject: inject
           };
-          this.open.push(open);
-        }
-      } // See if the child fits here
+        } // In pass 2, look for a set of wrapping nodes that make
+        // `first` fit here.
+        else if (pass == 2 && first && (wrap = match.findWrapping(first.type))) {
+            return {
+              sliceDepth: sliceDepth,
+              frontierDepth: frontierDepth,
+              parent: parent,
+              wrap: wrap
+            };
+          } // Don't continue looking further up if the parent node
+        // would fit here.
 
 
-      var match = open.match.matchType(child.type);
-
-      if (!match) {
-        var fill = open.match.fillBefore(Fragment.from(child));
-
-        if (fill) {
-          for (var j = 0; j < fill.childCount; j++) {
-            var ch = fill.child(j);
-            this.addNode(open, ch, 0);
-            match = open.match.matchFragment(ch);
-          }
-        } else if (parent && open.match.matchType(parent.type)) {
-          // Don't continue looking further up if the parent node
-          // would fit here.
+        if (parent && match.matchType(parent.type)) {
           break;
-        } else {
-          continue;
         }
-      } // Close open nodes above this one, since we're starting to
-      // add to this.
-
-
-      while (this.open.length - 1 > d) {
-        this.closeNode();
-      } // Strip marks from the child or close its start when necessary
-
-
-      child = child.mark(open.parent.type.allowedMarks(child.marks));
-
-      if (openStart) {
-        child = closeNodeStart(child, openStart, last ? openEnd : 0);
-        openStart = 0;
-      } // Add the child to this open node and adjust its metadata
-
-
-      this.addNode(open, child, last ? openEnd : 0);
-      open.match = match;
-
-      if (last) {
-        openEnd = 0;
       }
-
-      placed = true;
-      break;
-    } // As soon as we've failed to place a node we stop looking at
-    // later nodes
-
-
-    if (!placed) {
-      break;
     }
-  } // Close the current open node if it's not the the root and we
-  // either placed up to the end of the node or the the current
-  // slice depth's node type matches the open node's type
+  }
+};
 
+Fitter.prototype.openMore = function openMore() {
+  var ref = this.unplaced;
+  var content = ref.content;
+  var openStart = ref.openStart;
+  var openEnd = ref.openEnd;
+  var inner = contentAt(content, openStart);
 
-  if (this.open.length > 1 && (i > 0 && i == fragment.childCount || parent && this.open[this.open.length - 1].parent.type == parent.type)) {
-    this.closeNode();
+  if (!inner.childCount || inner.firstChild.isLeaf) {
+    return false;
   }
 
-  return new Slice(fragment.cutByIndex(i), openStart, openEnd);
+  this.unplaced = new Slice(content, openStart + 1, Math.max(openEnd, inner.size + openStart >= content.size - openEnd ? openStart + 1 : 0));
+  return true;
 };
 
-Frontier.prototype.addNode = function addNode(open, node, openEnd) {
-  open.content = closeFragmentEnd(open.content, open.openEnd).addToEnd(node);
-  open.openEnd = openEnd;
-};
+Fitter.prototype.dropNode = function dropNode() {
+  var ref = this.unplaced;
+  var content = ref.content;
+  var openStart = ref.openStart;
+  var openEnd = ref.openEnd;
+  var inner = contentAt(content, openStart);
 
-Frontier.prototype.closeNode = function closeNode() {
-  var open = this.open.pop();
-  if (open.content.size == 0) ;else if (open.wrapper) {
-    this.addNode(this.open[this.open.length - 1], open.parent.copy(open.content), open.openEnd + 1);
+  if (inner.childCount <= 1 && openStart > 0) {
+    var openAtEnd = content.size - openStart <= openStart + inner.size;
+    this.unplaced = new Slice(dropFromFragment(content, openStart - 1, 1), openStart - 1, openAtEnd ? openStart - 1 : openEnd);
   } else {
-    this.placed[open.depth] = {
-      depth: open.depth,
-      content: open.content,
-      openEnd: open.openEnd
+    this.unplaced = new Slice(dropFromFragment(content, openStart, 1), openStart, openEnd);
+  }
+}; // : ({sliceDepth: number, frontierDepth: number, parent: ?Node, wrap: ?[NodeType], inject: ?Fragment})
+// Move content from the unplaced slice at `sliceDepth` to the
+// frontier node at `frontierDepth`. Close that frontier node when
+// applicable.
+
+
+Fitter.prototype.placeNodes = function placeNodes(ref) {
+  var sliceDepth = ref.sliceDepth;
+  var frontierDepth = ref.frontierDepth;
+  var parent = ref.parent;
+  var inject = ref.inject;
+  var wrap = ref.wrap;
+
+  while (this.depth > frontierDepth) {
+    this.closeFrontierNode();
+  }
+
+  if (wrap) {
+    for (var i = 0; i < wrap.length; i++) {
+      this.openFrontierNode(wrap[i]);
+    }
+  }
+
+  var slice = this.unplaced,
+      fragment = parent ? parent.content : slice.content;
+  var openStart = slice.openStart - sliceDepth;
+  var taken = 0,
+      add = [];
+  var ref$1 = this.frontier[frontierDepth];
+  var match = ref$1.match;
+  var type = ref$1.type;
+
+  if (inject) {
+    for (var i$1 = 0; i$1 < inject.childCount; i$1++) {
+      add.push(inject.child(i$1));
+    }
+
+    match = match.matchFragment(inject);
+  } // Computes the amount of (end) open nodes at the end of the
+  // fragment. When 0, the parent is open, but no more. When
+  // negative, nothing is open.
+
+
+  var openEndCount = fragment.size + sliceDepth - (slice.content.size - slice.openEnd); // Scan over the fragment, fitting as many child nodes as
+  // possible.
+
+  while (taken < fragment.childCount) {
+    var next = fragment.child(taken),
+        matches = match.matchType(next.type);
+
+    if (!matches) {
+      break;
+    }
+
+    taken++;
+
+    if (taken > 1 || openStart == 0 || next.content.size) {
+      // Drop empty open nodes
+      match = matches;
+      add.push(closeNodeStart(next.mark(type.allowedMarks(next.marks)), taken == 1 ? openStart : 0, taken == fragment.childCount ? openEndCount : -1));
+    }
+  }
+
+  var toEnd = taken == fragment.childCount;
+
+  if (!toEnd) {
+    openEndCount = -1;
+  }
+
+  this.placed = addToFragment(this.placed, frontierDepth, Fragment.from(add));
+  this.frontier[frontierDepth].match = match; // If the parent types match, and the entire node was moved, and
+  // it's not open, close this frontier node right away.
+
+  if (toEnd && openEndCount < 0 && parent && parent.type == this.frontier[this.depth].type && this.frontier.length > 1) {
+    this.closeFrontierNode();
+  } // Add new frontier nodes for any open nodes at the end.
+
+
+  for (var i$2 = 0, cur = fragment; i$2 < openEndCount; i$2++) {
+    var node = cur.lastChild;
+    this.frontier.push({
+      type: node.type,
+      match: node.contentMatchAt(node.childCount)
+    });
+    cur = node.content;
+  } // Update `this.unplaced`. Drop the entire node from which we
+  // placed it we got to its end, otherwise just drop the placed
+  // nodes.
+
+
+  this.unplaced = !toEnd ? new Slice(dropFromFragment(slice.content, sliceDepth, taken), slice.openStart, slice.openEnd) : sliceDepth == 0 ? Slice.empty : new Slice(dropFromFragment(slice.content, sliceDepth - 1, 1), sliceDepth - 1, openEndCount < 0 ? slice.openEnd : sliceDepth - 1);
+};
+
+Fitter.prototype.mustMoveInline = function mustMoveInline() {
+  if (!this.$to.parent.isTextblock || this.$to.end() == this.$to.pos) {
+    return -1;
+  }
+
+  var top = this.frontier[this.depth],
+      level;
+
+  if (!top.type.isTextblock || !contentAfterFits(this.$to, this.$to.depth, top.type, top.match, false) || this.$to.depth == this.depth && (level = this.findCloseLevel(this.$to)) && level.depth == this.depth) {
+    return -1;
+  }
+
+  var ref = this.$to;
+  var depth = ref.depth;
+  var after = this.$to.after(depth);
+
+  while (depth > 1 && after == this.$to.end(--depth)) {
+    ++after;
+  }
+
+  return after;
+};
+
+Fitter.prototype.findCloseLevel = function findCloseLevel($to) {
+  scan: for (var i = Math.min(this.depth, $to.depth); i >= 0; i--) {
+    var ref = this.frontier[i];
+    var match = ref.match;
+    var type = ref.type;
+    var dropInner = i < $to.depth && $to.end(i + 1) == $to.pos + ($to.depth - (i + 1));
+    var fit = contentAfterFits($to, i, type, match, dropInner);
+
+    if (!fit) {
+      continue;
+    }
+
+    for (var d = i - 1; d >= 0; d--) {
+      var ref$1 = this.frontier[d];
+      var match$1 = ref$1.match;
+      var type$1 = ref$1.type;
+      var matches = contentAfterFits($to, d, type$1, match$1, true);
+
+      if (!matches || matches.childCount) {
+        continue scan;
+      }
+    }
+
+    return {
+      depth: i,
+      fit: fit,
+      move: dropInner ? $to.doc.resolve($to.after(i + 1)) : $to
     };
   }
 };
 
+Fitter.prototype.close = function close($to) {
+  var close = this.findCloseLevel($to);
+
+  if (!close) {
+    return null;
+  }
+
+  while (this.depth > close.depth) {
+    this.closeFrontierNode();
+  }
+
+  if (close.fit.childCount) {
+    this.placed = addToFragment(this.placed, close.depth, close.fit);
+  }
+
+  $to = close.move;
+
+  for (var d = close.depth + 1; d <= $to.depth; d++) {
+    var node = $to.node(d),
+        add = node.type.contentMatch.fillBefore(node.content, true, $to.index(d));
+    this.openFrontierNode(node.type, node.attrs, add);
+  }
+
+  return $to;
+};
+
+Fitter.prototype.openFrontierNode = function openFrontierNode(type, attrs, content) {
+  var top = this.frontier[this.depth];
+  top.match = top.match.matchType(type);
+  this.placed = addToFragment(this.placed, this.depth, Fragment.from(type.create(attrs, content)));
+  this.frontier.push({
+    type: type,
+    match: type.contentMatch
+  });
+};
+
+Fitter.prototype.closeFrontierNode = function closeFrontierNode() {
+  var open = this.frontier.pop();
+  var add = open.match.fillBefore(Fragment.empty, true);
+
+  if (add.childCount) {
+    this.placed = addToFragment(this.placed, this.frontier.length, add);
+  }
+};
+
+Object.defineProperties(Fitter.prototype, prototypeAccessors$1$4);
+
+function dropFromFragment(fragment, depth, count) {
+  if (depth == 0) {
+    return fragment.cutByIndex(count);
+  }
+
+  return fragment.replaceChild(0, fragment.firstChild.copy(dropFromFragment(fragment.firstChild.content, depth - 1, count)));
+}
+
+function addToFragment(fragment, depth, content) {
+  if (depth == 0) {
+    return fragment.append(content);
+  }
+
+  return fragment.replaceChild(fragment.childCount - 1, fragment.lastChild.copy(addToFragment(fragment.lastChild.content, depth - 1, content)));
+}
+
+function contentAt(fragment, depth) {
+  for (var i = 0; i < depth; i++) {
+    fragment = fragment.firstChild.content;
+  }
+
+  return fragment;
+}
+
 function closeNodeStart(node, openStart, openEnd) {
-  var content = node.content;
+  if (openStart <= 0) {
+    return node;
+  }
+
+  var frag = node.content;
 
   if (openStart > 1) {
-    var first = closeNodeStart(node.firstChild, openStart - 1, node.childCount == 1 ? openEnd - 1 : 0);
-    content = node.content.replaceChild(0, first);
+    frag = frag.replaceChild(0, closeNodeStart(frag.firstChild, openStart - 1, frag.childCount == 1 ? openEnd - 1 : 0));
   }
 
-  var fill = node.type.contentMatch.fillBefore(content, openEnd == 0);
-  return node.copy(fill.append(content));
-}
+  if (openStart > 0) {
+    frag = node.type.contentMatch.fillBefore(frag).append(frag);
 
-function closeNodeEnd(node, depth) {
-  var content = node.content;
-
-  if (depth > 1) {
-    var last = closeNodeEnd(node.lastChild, depth - 1);
-    content = node.content.replaceChild(node.childCount - 1, last);
+    if (openEnd <= 0) {
+      frag = frag.append(node.type.contentMatch.matchFragment(frag).fillBefore(Fragment.empty, true));
+    }
   }
 
-  var fill = node.contentMatchAt(node.childCount).fillBefore(Fragment.empty, true);
-  return node.copy(content.append(fill));
+  return node.copy(frag);
 }
 
-function closeFragmentEnd(fragment, depth) {
-  return depth ? fragment.replaceChild(fragment.childCount - 1, closeNodeEnd(fragment.lastChild, depth)) : fragment;
+function contentAfterFits($to, depth, type, match, open) {
+  var node = $to.node(depth),
+      index = open ? $to.indexAfter(depth) : $to.index(depth);
+
+  if (index == node.childCount && !type.compatibleContent(node.type)) {
+    return null;
+  }
+
+  var fit = match.fillBefore(node.content, true, index);
+  return fit && !invalidMarks(type, node.content, index) ? fit : null;
+}
+
+function invalidMarks(type, fragment, start) {
+  for (var i = start; i < fragment.childCount; i++) {
+    if (!type.allowsMarks(fragment.child(i).marks)) {
+      return true;
+    }
+  }
+
+  return false;
 } // :: (number, number, Slice) → this
 // Replace a range of the document with a given slice, using `from`,
 // `to`, and the slice's [`openStart`](#model.Slice.openStart) property
@@ -8127,7 +8167,7 @@ var EditorState = function EditorState(config) {
   this.config = config;
 };
 
-var prototypeAccessors$1$4 = {
+var prototypeAccessors$1$5 = {
   schema: {
     configurable: true
   },
@@ -8147,13 +8187,13 @@ var prototypeAccessors$1$4 = {
 // :: Schema
 // The schema of the state's document.
 
-prototypeAccessors$1$4.schema.get = function () {
+prototypeAccessors$1$5.schema.get = function () {
   return this.config.schema;
 }; // :: [Plugin]
 // The plugins that are active in this state.
 
 
-prototypeAccessors$1$4.plugins.get = function () {
+prototypeAccessors$1$5.plugins.get = function () {
   return this.config.plugins;
 }; // :: (Transaction) → EditorState
 // Apply the given transaction to produce a new state.
@@ -8274,7 +8314,7 @@ EditorState.prototype.applyInner = function applyInner(tr) {
 // Start a [transaction](#state.Transaction) from this state.
 
 
-prototypeAccessors$1$4.tr.get = function () {
+prototypeAccessors$1$5.tr.get = function () {
   return new Transaction(this);
 }; // :: (Object) → EditorState
 // Create a new state.
@@ -8444,7 +8484,7 @@ EditorState.removeApplyListener = function removeApplyListener(f) {
   }
 };
 
-Object.defineProperties(EditorState.prototype, prototypeAccessors$1$4);
+Object.defineProperties(EditorState.prototype, prototypeAccessors$1$5);
 var applyListeners = []; // PluginSpec:: interface
 //
 // This is the type passed to the [`Plugin`](#state.Plugin)
@@ -8629,8 +8669,12 @@ var parentNode = function parentNode(node) {
   return parent && parent.nodeType == 11 ? parent.host : parent;
 };
 
+var reusedRange = null; // Note that this will always return the same range, because DOM range
+// objects are every expensive, and keep slowing down subsequent DOM
+// updates, for some reason.
+
 var textRange = function textRange(node, from, to) {
-  var range = document.createRange();
+  var range = reusedRange || (reusedRange = document.createRange());
   range.setEnd(node, to == null ? node.nodeValue.length : to);
   range.setStart(node, from || 0);
   return range;
@@ -9134,11 +9178,7 @@ function posAtCoords(view, coords) {
   }
 
   var elt = root.elementFromPoint(coords.left, coords.top + 1),
-      pos; // Safari's caretRangeFromPoint returns nonsense when on a draggable element
-
-  if (result.safari && elt.draggable) {
-    node = offset = null;
-  }
+      pos;
 
   if (!elt || !view.dom.contains(elt.nodeType != 1 ? elt.parentNode : elt)) {
     var box = view.dom.getBoundingClientRect();
@@ -9152,6 +9192,11 @@ function posAtCoords(view, coords) {
     if (!elt) {
       return null;
     }
+  } // Safari's caretRangeFromPoint returns nonsense when on a draggable element
+
+
+  if (result.safari && elt.draggable) {
+    node = offset = null;
   }
 
   elt = targetKludge(elt, coords);
@@ -9199,18 +9244,24 @@ function posAtCoords(view, coords) {
 function singleRect(object, bias) {
   var rects = object.getClientRects();
   return !rects.length ? object.getBoundingClientRect() : rects[bias < 0 ? 0 : rects.length - 1];
-} // : (EditorView, number) → {left: number, top: number, right: number, bottom: number}
+}
+
+var BIDI = /[\u0590-\u05f4\u0600-\u06ff\u0700-\u08ac]/; // : (EditorView, number, number) → {left: number, top: number, right: number, bottom: number}
 // Given a position in the document model, get a bounding box of the
 // character at that position, relative to the window.
 
-
-function coordsAtPos(view, pos) {
+function coordsAtPos(view, pos, side) {
   var ref = view.docView.domFromPos(pos);
   var node = ref.node;
-  var offset = ref.offset; // These browsers support querying empty text ranges
+  var offset = ref.offset;
+  var $pos = view.state.doc.resolve(pos),
+      inline = $pos.parent.inlineContent; // These browsers support querying empty text ranges. Prefer that in
+  // bidi context.
 
-  if (node.nodeType == 3 && (result.webkit || result.gecko)) {
-    var rect = singleRect(textRange(node, offset, offset), 0); // Firefox returns bad results (the position before the space)
+  var supportEmptyRange = result.webkit || result.gecko;
+
+  if (node.nodeType == 3 && supportEmptyRange && BIDI.test(node.nodeValue)) {
+    var rect = singleRect(textRange(node, offset, offset), side); // Firefox returns bad results (the position before the space)
     // when querying a position directly after line-broken
     // whitespace. Detect this situation and and kludge around it
 
@@ -9227,67 +9278,74 @@ function coordsAtPos(view, pos) {
     }
 
     return rect;
-  }
+  } // Move up the DOM as far as possible when in inline context.
 
-  if (node.nodeType == 1 && !view.state.doc.resolve(pos).parent.inlineContent) {
-    // Return a horizontal line in block context
-    var top = true,
-        rect$1;
 
-    if (offset < node.childNodes.length) {
-      var after = node.childNodes[offset];
+  if (inline) {
+    var parent = $pos.depth ? view.docView.domAfterPos($pos.before()) : view.dom;
 
-      if (after.nodeType == 1) {
-        rect$1 = after.getBoundingClientRect();
-      }
+    while (side < 0 && !offset && node != parent) {
+      offset = domIndex(node);
+      node = node.parentNode;
     }
 
-    if (!rect$1 && offset) {
+    while (side >= 0 && offset == nodeSize(node) && node != parent) {
+      offset = domIndex(node) + 1;
+      node = node.parentNode;
+    }
+  }
+
+  if (node.nodeType == 3) {
+    if (side < 0) {
+      return flattenV(singleRect(textRange(node, offset - 1, offset), 1), false);
+    }
+
+    return flattenV(singleRect(textRange(node, offset, offset + 1), -1), true);
+  } // Return a horizontal line in block context
+
+
+  if (!inline) {
+    if (offset && (side < 0 || offset == nodeSize(node))) {
       var before = node.childNodes[offset - 1];
 
       if (before.nodeType == 1) {
-        rect$1 = before.getBoundingClientRect();
-        top = false;
+        return flattenH(before.getBoundingClientRect(), false);
       }
     }
 
-    return flattenH(rect$1 || node.getBoundingClientRect(), top);
-  } // Not Firefox/Chrome, or not in a text node, so we have to use
-  // actual element/character rectangles to get a solution (this part
-  // is not very bidi-safe)
-  //
-  // Try the left side first, fall back to the right one if that
-  // doesn't work.
+    if (offset < nodeSize(node)) {
+      var after = node.childNodes[offset];
 
-
-  for (var dir = -1; dir < 2; dir += 2) {
-    if (dir < 0 && offset) {
-      var prev = void 0,
-          target = node.nodeType == 3 ? textRange(node, offset - 1, offset) : (prev = node.childNodes[offset - 1]).nodeType == 3 ? textRange(prev) : prev.nodeType == 1 && prev.nodeName != "BR" ? prev : null; // BR nodes tend to only return the rectangle before them
-
-      if (target) {
-        var rect$2 = singleRect(target, 1);
-
-        if (rect$2.top < rect$2.bottom) {
-          return flattenV(rect$2, false);
-        }
+      if (after.nodeType == 1) {
+        return flattenH(after.getBoundingClientRect(), true);
       }
-    } else if (dir > 0 && offset < nodeSize(node)) {
-      var next = void 0,
-          target$1 = node.nodeType == 3 ? textRange(node, offset, offset + 1) : (next = node.childNodes[offset]).nodeType == 3 ? textRange(next) : next.nodeType == 1 ? next : null;
+    }
 
-      if (target$1) {
-        var rect$3 = singleRect(target$1, -1);
+    return flattenH(node.getBoundingClientRect(), side >= 0);
+  } // Inline, not in text node (this is not Bidi-safe)
 
-        if (rect$3.top < rect$3.bottom) {
-          return flattenV(rect$3, true);
-        }
-      }
+
+  if (offset && (side < 0 || offset == nodeSize(node))) {
+    var before$1 = node.childNodes[offset - 1];
+    var target = before$1.nodeType == 3 ? textRange(before$1, nodeSize(before$1) - (supportEmptyRange ? 0 : 1)) // BR nodes tend to only return the rectangle before them
+    : before$1.nodeType == 1 && before$1.nodeName != "BR" ? before$1 : null;
+
+    if (target) {
+      return flattenV(singleRect(target, 1), false);
+    }
+  }
+
+  if (offset < nodeSize(node)) {
+    var after$1 = node.childNodes[offset];
+    var target$1 = after$1.nodeType == 3 ? textRange(after$1, 0, supportEmptyRange ? 0 : 1) : after$1.nodeType == 1 ? after$1 : null;
+
+    if (target$1) {
+      return flattenV(singleRect(target$1, -1), true);
     }
   } // All else failed, just try to get a rectangle for the target node
 
 
-  return flattenV(singleRect(node.nodeType == 3 ? textRange(node) : node, 0), false);
+  return flattenV(singleRect(node.nodeType == 3 ? textRange(node) : node, -side), side >= 0);
 }
 
 function flattenV(rect, left) {
@@ -9368,7 +9426,7 @@ function endOfTextblockVertical(view, state, dir) {
       dom = nearest.dom.parentNode;
     }
 
-    var coords = coordsAtPos(view, $pos.pos);
+    var coords = coordsAtPos(view, $pos.pos, 1);
 
     for (var child = dom.firstChild; child; child = child.nextSibling) {
       var boxes = void 0;
@@ -9784,13 +9842,15 @@ ViewDesc.prototype.getDesc = function getDesc(dom) {
 };
 
 ViewDesc.prototype.posFromDOM = function posFromDOM(dom, offset, bias) {
-  for (var scan = dom;; scan = scan.parentNode) {
+  for (var scan = dom; scan; scan = scan.parentNode) {
     var desc = this.getDesc(scan);
 
     if (desc) {
       return desc.localPosFromDOM(dom, offset, bias);
     }
   }
+
+  return -1;
 }; // : (number) → ?NodeViewDesc
 // Find the desc for the node after the given pos, if any. (When a
 // parent node overrode rendering, there might not be one.)
@@ -9900,7 +9960,7 @@ ViewDesc.prototype.parseRange = function parseRange(from, to, base) {
       }
     }
 
-    if (fromOffset > -1 && to <= end) {
+    if (fromOffset > -1 && (end > to || i == this.children.length - 1)) {
       to = end;
 
       for (var j$1 = i + 1; j$1 < this.children.length; j$1++) {
@@ -9980,8 +10040,17 @@ ViewDesc.prototype.setSelection = function setSelection(anchor, head, root, forc
   var anchorDOM = this.domFromPos(anchor),
       headDOM = this.domFromPos(head);
   var domSel = root.getSelection();
+  var brKludge = false; // On Firefox, using Selection.collapse to put the cursor after a
+  // BR node for some reason doesn't always work (#1073). On Safari,
+  // the cursor sometimes inexplicable visually lags behind its
+  // reported position in such situations (#1092).
 
-  if (!force && isEquivalentPosition(anchorDOM.node, anchorDOM.offset, domSel.anchorNode, domSel.anchorOffset) && isEquivalentPosition(headDOM.node, headDOM.offset, domSel.focusNode, domSel.focusOffset)) {
+  if ((result.gecko || result.safari) && anchor == head) {
+    var prev = anchorDOM.node.childNodes[anchorDOM.offset - 1];
+    brKludge = prev && (prev.nodeName == "BR" || prev.contentEditable == "false");
+  }
+
+  if (!(force || brKludge && result.safari) && isEquivalentPosition(anchorDOM.node, anchorDOM.offset, domSel.anchorNode, domSel.anchorOffset) && isEquivalentPosition(headDOM.node, headDOM.offset, domSel.focusNode, domSel.focusOffset)) {
     return;
   } // Selection.extend can be used to create an 'inverted' selection
   // (one where the focus is before the anchor), but not all
@@ -9990,7 +10059,7 @@ ViewDesc.prototype.setSelection = function setSelection(anchor, head, root, forc
 
   var domSelExtended = false;
 
-  if (domSel.extend || anchor == head) {
+  if ((domSel.extend || anchor == head) && !brKludge) {
     domSel.collapse(anchorDOM.node, anchorDOM.offset);
 
     try {
@@ -10006,7 +10075,8 @@ ViewDesc.prototype.setSelection = function setSelection(anchor, head, root, forc
       // without using extend.
       if (!(err instanceof DOMException)) {
         throw err;
-      }
+      } // declare global: DOMException
+
     }
   }
 
@@ -10451,15 +10521,11 @@ var NodeViewDesc = /*@__PURE__*/function (ViewDesc) {
         this.protectLocalComposition(view, composition);
       }
 
-      this.renderChildren();
-    }
-  };
+      renderDescs(this.contentDOM, this.children, view);
 
-  NodeViewDesc.prototype.renderChildren = function renderChildren() {
-    renderDescs(this.contentDOM, this.children);
-
-    if (result.ios) {
-      iosHacks(this.dom);
+      if (result.ios) {
+        iosHacks(this.dom);
+      }
     }
   };
 
@@ -10610,12 +10676,18 @@ var TextViewDesc = /*@__PURE__*/function (NodeViewDesc) {
   TextViewDesc.prototype.constructor = TextViewDesc;
 
   TextViewDesc.prototype.parseRule = function parseRule() {
+    var skip = this.nodeDOM.parentNode;
+
+    while (skip && skip != this.dom && !skip.pmIsDeco) {
+      skip = skip.parentNode;
+    }
+
     return {
-      skip: this.nodeDOM.parentNode || true
+      skip: skip || true
     };
   };
 
-  TextViewDesc.prototype.update = function update(node, outerDeco) {
+  TextViewDesc.prototype.update = function update(node, outerDeco, _, view) {
     if (this.dirty == NODE_DIRTY || this.dirty != NOT_DIRTY && !this.inParent() || !node.sameMarkup(this.node)) {
       return false;
     }
@@ -10624,6 +10696,10 @@ var TextViewDesc = /*@__PURE__*/function (NodeViewDesc) {
 
     if ((this.dirty != NOT_DIRTY || node.text != this.node.text) && node.text != this.nodeDOM.nodeValue) {
       this.nodeDOM.nodeValue = node.text;
+
+      if (view.trackWrites == this.nodeDOM) {
+        view.trackWrites = null;
+      }
     }
 
     this.node = node;
@@ -10765,8 +10841,9 @@ var CustomNodeViewDesc = /*@__PURE__*/function (NodeViewDesc) {
 // because this should sync the subtree for a whole node at a time.
 
 
-function renderDescs(parentDOM, descs) {
-  var dom = parentDOM.firstChild;
+function renderDescs(parentDOM, descs, view) {
+  var dom = parentDOM.firstChild,
+      written = false;
 
   for (var i = 0; i < descs.length; i++) {
     var desc = descs[i],
@@ -10775,22 +10852,29 @@ function renderDescs(parentDOM, descs) {
     if (childDOM.parentNode == parentDOM) {
       while (childDOM != dom) {
         dom = rm(dom);
+        written = true;
       }
 
       dom = dom.nextSibling;
     } else {
+      written = true;
       parentDOM.insertBefore(childDOM, dom);
     }
 
     if (desc instanceof MarkViewDesc) {
       var pos = dom ? dom.previousSibling : parentDOM.lastChild;
-      renderDescs(desc.contentDOM, desc.children);
+      renderDescs(desc.contentDOM, desc.children, view);
       dom = pos ? pos.nextSibling : parentDOM.firstChild;
     }
   }
 
   while (dom) {
     dom = rm(dom);
+    written = true;
+  }
+
+  if (written && view.trackWrites == parentDOM) {
+    view.trackWrites = null;
   }
 }
 
@@ -10866,6 +10950,7 @@ function patchOuterDeco(outerDOM, nodeDOM, prevComputed, curComputed) {
         curDOM = parent;
       } else {
         parent = document.createElement(deco.nodeName);
+        parent.pmIsDeco = true;
         parent.appendChild(curDOM);
         prev = noDeco[0];
         curDOM = parent;
@@ -11118,7 +11203,9 @@ ViewTreeUpdater.prototype.addNode = function addNode(node, outerDeco, innerDeco,
 };
 
 ViewTreeUpdater.prototype.placeWidget = function placeWidget(widget, view, pos) {
-  if (this.index < this.top.children.length && this.top.children[this.index].matchesWidget(widget)) {
+  var next = this.index < this.top.children.length ? this.top.children[this.index] : null;
+
+  if (next && next.matchesWidget(widget) && (widget == next.widget || !next.widget.type.toDOM.parentNode)) {
     this.index++;
   } else {
     var desc = new WidgetViewDesc(this.top, widget, view, pos);
@@ -11247,7 +11334,7 @@ function iterDeco(parent, deco, onWidget, onNode) {
       }
     }
 
-    while (decoIndex < locals.length && locals[decoIndex].from == offset) {
+    while (decoIndex < locals.length && locals[decoIndex].from <= offset && locals[decoIndex].to > offset) {
       active.push(locals[decoIndex++]);
     }
 
@@ -11274,7 +11361,10 @@ function iterDeco(parent, deco, onWidget, onNode) {
       }
     }
 
-    onNode(child$1, active.length ? active.slice() : nothing, deco.forChild(offset, child$1), index);
+    var outerDeco = !active.length ? nothing : child$1.isInline && !child$1.isLeaf ? active.filter(function (d) {
+      return !d.inline;
+    }) : active.slice();
+    onNode(child$1, outerDeco, deco.forChild(offset, child$1), index);
     offset = end;
   }
 } // List markers in Mobile Safari will mysteriously disappear
@@ -11380,6 +11470,260 @@ function replaceNodes(nodes, from, to, view, replacement) {
   }
 
   return result;
+}
+
+function selectionFromDOM(view, origin) {
+  var domSel = view.root.getSelection(),
+      doc = view.state.doc;
+
+  if (!domSel.focusNode) {
+    return null;
+  }
+
+  var nearestDesc = view.docView.nearestDesc(domSel.focusNode),
+      inWidget = nearestDesc && nearestDesc.size == 0;
+  var head = view.docView.posFromDOM(domSel.focusNode, domSel.focusOffset);
+
+  if (head < 0) {
+    return null;
+  }
+
+  var $head = doc.resolve(head),
+      $anchor,
+      selection;
+
+  if (selectionCollapsed(domSel)) {
+    $anchor = $head;
+
+    while (nearestDesc && !nearestDesc.node) {
+      nearestDesc = nearestDesc.parent;
+    }
+
+    if (nearestDesc && nearestDesc.node.isAtom && NodeSelection.isSelectable(nearestDesc.node) && nearestDesc.parent && !(nearestDesc.node.isInline && isOnEdge(domSel.focusNode, domSel.focusOffset, nearestDesc.dom))) {
+      var pos = nearestDesc.posBefore;
+      selection = new NodeSelection(head == pos ? $head : doc.resolve(pos));
+    }
+  } else {
+    var anchor = view.docView.posFromDOM(domSel.anchorNode, domSel.anchorOffset);
+
+    if (anchor < 0) {
+      return null;
+    }
+
+    $anchor = doc.resolve(anchor);
+  }
+
+  if (!selection) {
+    var bias = origin == "pointer" || view.state.selection.head < $head.pos && !inWidget ? 1 : -1;
+    selection = selectionBetween(view, $anchor, $head, bias);
+  }
+
+  return selection;
+}
+
+function selectionToDOM(view, force) {
+  var sel = view.state.selection;
+  syncNodeSelection(view, sel);
+
+  if (view.editable ? !view.hasFocus() : !(hasSelection(view) && document.activeElement && document.activeElement.contains(view.dom))) {
+    return;
+  }
+
+  view.domObserver.disconnectSelection();
+
+  if (view.cursorWrapper) {
+    selectCursorWrapper(view);
+  } else {
+    var anchor = sel.anchor;
+    var head = sel.head;
+    var resetEditableFrom, resetEditableTo;
+
+    if (brokenSelectBetweenUneditable && !(sel instanceof TextSelection)) {
+      if (!sel.$from.parent.inlineContent) {
+        resetEditableFrom = temporarilyEditableNear(view, sel.from);
+      }
+
+      if (!sel.empty && !sel.$from.parent.inlineContent) {
+        resetEditableTo = temporarilyEditableNear(view, sel.to);
+      }
+    }
+
+    view.docView.setSelection(anchor, head, view.root, force);
+
+    if (brokenSelectBetweenUneditable) {
+      if (resetEditableFrom) {
+        resetEditable(resetEditableFrom);
+      }
+
+      if (resetEditableTo) {
+        resetEditable(resetEditableTo);
+      }
+    }
+
+    if (sel.visible) {
+      view.dom.classList.remove("ProseMirror-hideselection");
+    } else {
+      view.dom.classList.add("ProseMirror-hideselection");
+
+      if ("onselectionchange" in document) {
+        removeClassOnSelectionChange(view);
+      }
+    }
+  }
+
+  view.domObserver.setCurSelection();
+  view.domObserver.connectSelection();
+} // Kludge to work around Webkit not allowing a selection to start/end
+// between non-editable block nodes. We briefly make something
+// editable, set the selection, then set it uneditable again.
+
+
+var brokenSelectBetweenUneditable = result.safari || result.chrome && result.chrome_version < 63;
+
+function temporarilyEditableNear(view, pos) {
+  var ref = view.docView.domFromPos(pos);
+  var node = ref.node;
+  var offset = ref.offset;
+  var after = offset < node.childNodes.length ? node.childNodes[offset] : null;
+  var before = offset ? node.childNodes[offset - 1] : null;
+
+  if (result.safari && after && after.contentEditable == "false") {
+    return setEditable(after);
+  }
+
+  if ((!after || after.contentEditable == "false") && (!before || before.contentEditable == "false")) {
+    if (after) {
+      return setEditable(after);
+    } else if (before) {
+      return setEditable(before);
+    }
+  }
+}
+
+function setEditable(element) {
+  element.contentEditable = "true";
+
+  if (result.safari && element.draggable) {
+    element.draggable = false;
+    element.wasDraggable = true;
+  }
+
+  return element;
+}
+
+function resetEditable(element) {
+  element.contentEditable = "false";
+
+  if (element.wasDraggable) {
+    element.draggable = true;
+    element.wasDraggable = null;
+  }
+}
+
+function removeClassOnSelectionChange(view) {
+  var doc = view.dom.ownerDocument;
+  doc.removeEventListener("selectionchange", view.hideSelectionGuard);
+  var domSel = view.root.getSelection();
+  var node = domSel.anchorNode,
+      offset = domSel.anchorOffset;
+  doc.addEventListener("selectionchange", view.hideSelectionGuard = function () {
+    if (domSel.anchorNode != node || domSel.anchorOffset != offset) {
+      doc.removeEventListener("selectionchange", view.hideSelectionGuard);
+      view.dom.classList.remove("ProseMirror-hideselection");
+    }
+  });
+}
+
+function selectCursorWrapper(view) {
+  var domSel = view.root.getSelection(),
+      range = document.createRange();
+  var node = view.cursorWrapper.dom,
+      img = node.nodeName == "IMG";
+
+  if (img) {
+    range.setEnd(node.parentNode, domIndex(node) + 1);
+  } else {
+    range.setEnd(node, 0);
+  }
+
+  range.collapse(false);
+  domSel.removeAllRanges();
+  domSel.addRange(range); // Kludge to kill 'control selection' in IE11 when selecting an
+  // invisible cursor wrapper, since that would result in those weird
+  // resize handles and a selection that considers the absolutely
+  // positioned wrapper, rather than the root editable node, the
+  // focused element.
+
+  if (!img && !view.state.selection.visible && result.ie && result.ie_version <= 11) {
+    node.disabled = true;
+    node.disabled = false;
+  }
+}
+
+function syncNodeSelection(view, sel) {
+  if (sel instanceof NodeSelection) {
+    var desc = view.docView.descAt(sel.from);
+
+    if (desc != view.lastSelectedViewDesc) {
+      clearNodeSelection(view);
+
+      if (desc) {
+        desc.selectNode();
+      }
+
+      view.lastSelectedViewDesc = desc;
+    }
+  } else {
+    clearNodeSelection(view);
+  }
+} // Clear all DOM statefulness of the last node selection.
+
+
+function clearNodeSelection(view) {
+  if (view.lastSelectedViewDesc) {
+    if (view.lastSelectedViewDesc.parent) {
+      view.lastSelectedViewDesc.deselectNode();
+    }
+
+    view.lastSelectedViewDesc = null;
+  }
+}
+
+function selectionBetween(view, $anchor, $head, bias) {
+  return view.someProp("createSelectionBetween", function (f) {
+    return f(view, $anchor, $head);
+  }) || TextSelection.between($anchor, $head, bias);
+}
+
+function hasFocusAndSelection(view) {
+  if (view.editable && view.root.activeElement != view.dom) {
+    return false;
+  }
+
+  return hasSelection(view);
+}
+
+function hasSelection(view) {
+  var sel = view.root.getSelection();
+
+  if (!sel.anchorNode) {
+    return false;
+  }
+
+  try {
+    // Firefox will raise 'permission denied' errors when accessing
+    // properties of `sel.anchorNode` when it's in a generated CSS
+    // element.
+    return view.dom.contains(sel.anchorNode.nodeType == 3 ? sel.anchorNode.parentNode : sel.anchorNode) && (view.editable || view.dom.contains(sel.focusNode.nodeType == 3 ? sel.focusNode.parentNode : sel.focusNode));
+  } catch (_) {
+    return false;
+  }
+}
+
+function anchorInRightPlace(view) {
+  var anchorDOM = view.docView.domFromPos(view.state.selection.anchor);
+  var domSel = view.root.getSelection();
+  return isEquivalentPosition(anchorDOM.node, anchorDOM.offset, domSel.anchorNode, domSel.anchorOffset);
 }
 
 function moveSelectionBlock(state, dir) {
@@ -11606,6 +11950,13 @@ function setSelFocus(view, sel, node, offset) {
   }
 
   view.domObserver.setCurSelection();
+  var state = view.state; // If no state update ends up happening, reset the selection.
+
+  setTimeout(function () {
+    if (view.state == state) {
+      selectionToDOM(view);
+    }
+  }, 50);
 } // : (EditorState, number)
 // Check whether vertical selection motion would involve node
 // selections. If so, apply it (if not, the result is left to the
@@ -11686,14 +12037,15 @@ function switchEditable(view, node, state) {
   view.domObserver.stop();
   node.contentEditable = state;
   view.domObserver.start();
-} // Issue #867 / https://bugs.chromium.org/p/chromium/issues/detail?id=903821
-// In which Chrome does really wrong things when the down arrow is
-// pressed when the cursor is directly at the start of a textblock and
-// has an uneditable node after it
+} // Issue #867 / #1090 / https://bugs.chromium.org/p/chromium/issues/detail?id=903821
+// In which Safari (and at some point in the past, Chrome) does really
+// wrong things when the down arrow is pressed when the cursor is
+// directly at the start of a textblock and has an uneditable node
+// after it
 
 
-function chromeDownArrowBug(view) {
-  if (!result.chrome || view.state.selection.$head.parentOffset > 0) {
+function safariDownArrowBug(view) {
+  if (!result.safari || view.state.selection.$head.parentOffset > 0) {
     return;
   }
 
@@ -11762,251 +12114,13 @@ function captureKeyDown(view, event) {
     return selectVertically(view, -1, mods) || skipIgnoredNodesLeft(view);
   } else if (code == 40) {
     // Down arrow
-    return chromeDownArrowBug(view) || selectVertically(view, 1, mods) || skipIgnoredNodesRight(view);
+    return safariDownArrowBug(view) || selectVertically(view, 1, mods) || skipIgnoredNodesRight(view);
   } else if (mods == (result.mac ? "m" : "c") && (code == 66 || code == 73 || code == 89 || code == 90)) {
     // Mod-[biyz]
     return true;
   }
 
   return false;
-}
-
-function selectionFromDOM(view, origin) {
-  var domSel = view.root.getSelection(),
-      doc = view.state.doc;
-  var nearestDesc = view.docView.nearestDesc(domSel.focusNode),
-      inWidget = nearestDesc && nearestDesc.size == 0;
-  var head = view.docView.posFromDOM(domSel.focusNode, domSel.focusOffset);
-  var $head = doc.resolve(head),
-      $anchor,
-      selection;
-
-  if (selectionCollapsed(domSel)) {
-    $anchor = $head;
-
-    while (nearestDesc && !nearestDesc.node) {
-      nearestDesc = nearestDesc.parent;
-    }
-
-    if (nearestDesc && nearestDesc.node.isAtom && NodeSelection.isSelectable(nearestDesc.node) && nearestDesc.parent && !(nearestDesc.node.isInline && isOnEdge(domSel.focusNode, domSel.focusOffset, nearestDesc.dom))) {
-      var pos = nearestDesc.posBefore;
-      selection = new NodeSelection(head == pos ? $head : doc.resolve(pos));
-    }
-  } else {
-    $anchor = doc.resolve(view.docView.posFromDOM(domSel.anchorNode, domSel.anchorOffset));
-  }
-
-  if (!selection) {
-    var bias = origin == "pointer" || view.state.selection.head < $head.pos && !inWidget ? 1 : -1;
-    selection = selectionBetween(view, $anchor, $head, bias);
-  }
-
-  return selection;
-}
-
-function selectionToDOM(view, force) {
-  var sel = view.state.selection;
-  syncNodeSelection(view, sel);
-
-  if (view.editable ? !view.hasFocus() : !(hasSelection(view) && document.activeElement && document.activeElement.contains(view.dom))) {
-    return;
-  }
-
-  view.domObserver.disconnectSelection();
-
-  if (view.cursorWrapper) {
-    selectCursorWrapper(view);
-  } else {
-    var anchor = sel.anchor;
-    var head = sel.head;
-    var resetEditableFrom, resetEditableTo;
-
-    if (brokenSelectBetweenUneditable && !(sel instanceof TextSelection)) {
-      if (!sel.$from.parent.inlineContent) {
-        resetEditableFrom = temporarilyEditableNear(view, sel.from);
-      }
-
-      if (!sel.empty && !sel.$from.parent.inlineContent) {
-        resetEditableTo = temporarilyEditableNear(view, sel.to);
-      }
-    }
-
-    view.docView.setSelection(anchor, head, view.root, force);
-
-    if (brokenSelectBetweenUneditable) {
-      if (resetEditableFrom) {
-        resetEditable(resetEditableFrom);
-      }
-
-      if (resetEditableTo) {
-        resetEditable(resetEditableTo);
-      }
-    }
-
-    if (sel.visible) {
-      view.dom.classList.remove("ProseMirror-hideselection");
-    } else {
-      view.dom.classList.add("ProseMirror-hideselection");
-
-      if ("onselectionchange" in document) {
-        removeClassOnSelectionChange(view);
-      }
-    }
-  }
-
-  view.domObserver.setCurSelection();
-  view.domObserver.connectSelection();
-} // Kludge to work around Webkit not allowing a selection to start/end
-// between non-editable block nodes. We briefly make something
-// editable, set the selection, then set it uneditable again.
-
-
-var brokenSelectBetweenUneditable = result.safari || result.chrome && result.chrome_version < 63;
-
-function temporarilyEditableNear(view, pos) {
-  var ref = view.docView.domFromPos(pos);
-  var node = ref.node;
-  var offset = ref.offset;
-  var after = offset < node.childNodes.length ? node.childNodes[offset] : null;
-  var before = offset ? node.childNodes[offset - 1] : null;
-
-  if (result.safari && after && after.contentEditable == "false") {
-    return setEditable(after);
-  }
-
-  if ((!after || after.contentEditable == "false") && (!before || before.contentEditable == "false")) {
-    if (after) {
-      return setEditable(after);
-    } else if (before) {
-      return setEditable(before);
-    }
-  }
-}
-
-function setEditable(element) {
-  element.contentEditable = "true";
-
-  if (result.safari && element.draggable) {
-    element.draggable = false;
-    element.wasDraggable = true;
-  }
-
-  return element;
-}
-
-function resetEditable(element) {
-  element.contentEditable = "false";
-
-  if (element.wasDraggable) {
-    element.draggable = true;
-    element.wasDraggable = null;
-  }
-}
-
-function removeClassOnSelectionChange(view) {
-  var doc = view.dom.ownerDocument;
-  doc.removeEventListener("selectionchange", view.hideSelectionGuard);
-  var domSel = view.root.getSelection();
-  var node = domSel.anchorNode,
-      offset = domSel.anchorOffset;
-  doc.addEventListener("selectionchange", view.hideSelectionGuard = function () {
-    if (domSel.anchorNode != node || domSel.anchorOffset != offset) {
-      doc.removeEventListener("selectionchange", view.hideSelectionGuard);
-      view.dom.classList.remove("ProseMirror-hideselection");
-    }
-  });
-}
-
-function selectCursorWrapper(view) {
-  var domSel = view.root.getSelection(),
-      range = document.createRange();
-  var node = view.cursorWrapper.dom,
-      img = node.nodeName == "IMG";
-
-  if (img) {
-    range.setEnd(node.parentNode, domIndex(node) + 1);
-  } else {
-    range.setEnd(node, 0);
-  }
-
-  range.collapse(false);
-  domSel.removeAllRanges();
-  domSel.addRange(range); // Kludge to kill 'control selection' in IE11 when selecting an
-  // invisible cursor wrapper, since that would result in those weird
-  // resize handles and a selection that considers the absolutely
-  // positioned wrapper, rather than the root editable node, the
-  // focused element.
-
-  if (!img && !view.state.selection.visible && result.ie && result.ie_version <= 11) {
-    node.disabled = true;
-    node.disabled = false;
-  }
-}
-
-function syncNodeSelection(view, sel) {
-  if (sel instanceof NodeSelection) {
-    var desc = view.docView.descAt(sel.from);
-
-    if (desc != view.lastSelectedViewDesc) {
-      clearNodeSelection(view);
-
-      if (desc) {
-        desc.selectNode();
-      }
-
-      view.lastSelectedViewDesc = desc;
-    }
-  } else {
-    clearNodeSelection(view);
-  }
-} // Clear all DOM statefulness of the last node selection.
-
-
-function clearNodeSelection(view) {
-  if (view.lastSelectedViewDesc) {
-    if (view.lastSelectedViewDesc.parent) {
-      view.lastSelectedViewDesc.deselectNode();
-    }
-
-    view.lastSelectedViewDesc = null;
-  }
-}
-
-function selectionBetween(view, $anchor, $head, bias) {
-  return view.someProp("createSelectionBetween", function (f) {
-    return f(view, $anchor, $head);
-  }) || TextSelection.between($anchor, $head, bias);
-}
-
-function hasFocusAndSelection(view) {
-  if (view.editable && view.root.activeElement != view.dom) {
-    return false;
-  }
-
-  return hasSelection(view);
-}
-
-function hasSelection(view) {
-  var sel = view.root.getSelection();
-
-  if (!sel.anchorNode) {
-    return false;
-  }
-
-  try {
-    // Firefox will raise 'permission denied' errors when accessing
-    // properties of `sel.anchorNode` when it's in a generated CSS
-    // element.
-    return view.dom.contains(sel.anchorNode.nodeType == 3 ? sel.anchorNode.parentNode : sel.anchorNode) && (view.editable || view.dom.contains(sel.focusNode.nodeType == 3 ? sel.focusNode.parentNode : sel.focusNode));
-  } catch (_) {
-    return false;
-  }
-}
-
-function anchorInRightPlace(view) {
-  var anchorDOM = view.docView.domFromPos(view.state.selection.anchor);
-  var domSel = view.root.getSelection();
-  return isEquivalentPosition(anchorDOM.node, anchorDOM.offset, domSel.anchorNode, domSel.anchorOffset);
 } // Note that all referencing and parsing is done with the
 // start-of-operation selection and document, since that's the one
 // that the DOM represents. If any changes came in in the meantime,
@@ -12128,7 +12242,7 @@ function readDOMChange(view, from, to, typeOver, addedNodes) {
     var origin = view.lastSelectionTime > Date.now() - 50 ? view.lastSelectionOrigin : null;
     var newSel = selectionFromDOM(view, origin);
 
-    if (!view.state.selection.eq(newSel)) {
+    if (newSel && !view.state.selection.eq(newSel)) {
       var tr$1 = view.state.tr.setSelection(newSel);
 
       if (origin == "pointer") {
@@ -12212,7 +12326,7 @@ function readDOMChange(view, from, to, typeOver, addedNodes) {
   var nextSel; // If this looks like the effect of pressing Enter (or was recorded
   // as being an iOS enter press), just dispatch an Enter key instead.
 
-  if ((result.ios && view.lastIOSEnter > Date.now() - 100 && (!inlineChange || addedNodes.some(function (n) {
+  if ((result.ios && view.lastIOSEnter > Date.now() - 225 && (!inlineChange || addedNodes.some(function (n) {
     return n.nodeName == "DIV" || n.nodeName == "P";
   })) || !inlineChange && $from.pos < parse.doc.content.size && (nextSel = Selection.findFrom(parse.doc.resolve($from.pos + 1), 1, true)) && nextSel.head == $to.pos) && view.someProp("handleKeyDown", function (f) {
     return f(view, keyEvent(13, "Enter"));
@@ -12231,6 +12345,24 @@ function readDOMChange(view, from, to, typeOver, addedNodes) {
 
 
     return;
+  } // This tries to detect Android virtual keyboard
+  // enter-and-pick-suggestion action. That sometimes (see issue
+  // #1059) first fires a DOM mutation, before moving the selection to
+  // the newly created block. And then, because ProseMirror cleans up
+  // the DOM selection, it gives up moving the selection entirely,
+  // leaving the cursor in the wrong place. When that happens, we drop
+  // the new paragraph from the initial change, and fire a simulated
+  // enter key afterwards.
+
+
+  if (result.android && !inlineChange && $from.start() != $to.start() && $to.parentOffset == 0 && $from.depth == $to.depth && parse.sel && parse.sel.anchor == parse.sel.head && parse.sel.head == change.endA) {
+    change.endB -= 2;
+    $to = parse.doc.resolveNoCache(change.endB - parse.from);
+    setTimeout(function () {
+      view.someProp("handleKeyDown", function (f) {
+        return f(view, keyEvent(13, "Enter"));
+      });
+    }, 20);
   }
 
   var chFrom = change.start,
@@ -12503,7 +12635,7 @@ function parseFromClipboard(view, text, html, plainText, $context) {
 
   if (asText) {
     view.someProp("transformPastedText", function (f) {
-      text = f(text);
+      text = f(text, inCode || plainText);
     });
 
     if (inCode) {
@@ -12511,7 +12643,7 @@ function parseFromClipboard(view, text, html, plainText, $context) {
     }
 
     var parsed = view.someProp("clipboardTextParser", function (f) {
-      return f(text, $context);
+      return f(text, $context, plainText);
     });
 
     if (parsed) {
@@ -13114,6 +13246,7 @@ function initInput(view) {
   view.lastSelectionOrigin = null;
   view.lastSelectionTime = 0;
   view.lastIOSEnter = 0;
+  view.lastIOSEnterFallbackTimeout = null;
   view.composing = false;
   view.composingTimeout = null;
   view.compositionNodes = [];
@@ -13164,6 +13297,7 @@ function destroyInput(view) {
   }
 
   clearTimeout(view.composingTimeout);
+  clearTimeout(view.lastIOSEnterFallbackTimeout);
 }
 
 function ensureListeners(view) {
@@ -13226,14 +13360,14 @@ editHandlers.keydown = function (view, event) {
   if (result.ios && event.keyCode == 13 && !event.ctrlKey && !event.altKey && !event.metaKey) {
     var now = Date.now();
     view.lastIOSEnter = now;
-    setTimeout(function () {
+    view.lastIOSEnterFallbackTimeout = setTimeout(function () {
       if (view.lastIOSEnter == now) {
         view.someProp("handleKeyDown", function (f) {
           return f(view, keyEvent(13, "Enter"));
         });
         view.lastIOSEnter = 0;
       }
-    }, 50);
+    }, 200);
   } else if (view.someProp("handleKeyDown", function (f) {
     return f(view, event);
   }) || captureKeyDown(view, event)) {
@@ -13685,18 +13819,22 @@ function scheduleComposeEnd(view, delay) {
   }
 }
 
-function endComposition(view, forceUpdate) {
-  view.domObserver.forceFlush();
+function clearComposition(view) {
   view.composing = false;
 
   while (view.compositionNodes.length > 0) {
     view.compositionNodes.pop().markParentsDirty();
   }
+}
+
+function endComposition(view, forceUpdate) {
+  view.domObserver.forceFlush();
+  clearComposition(view);
 
   if (forceUpdate || view.docView.dirty) {
     var sel = selectionFromDOM(view);
 
-    if (!sel.eq(view.state.selection)) {
+    if (sel && !sel.eq(view.state.selection)) {
       view.dispatch(view.state.tr.setSelection(sel));
     } else {
       view.updateState(view.state);
@@ -13876,8 +14014,11 @@ handlers.dragstart = function (view, e) {
 };
 
 handlers.dragend = function (view) {
+  var dragging = view.dragging;
   window.setTimeout(function () {
-    return view.dragging = null;
+    if (view.dragging == dragging) {
+      view.dragging = null;
+    }
   }, 50);
 };
 
@@ -13906,9 +14047,10 @@ editHandlers.drop = function (view, e) {
   }
 
   var slice = dragging && dragging.slice || parseFromClipboard(view, e.dataTransfer.getData(brokenClipboardAPI ? "Text" : "text/plain"), brokenClipboardAPI ? null : e.dataTransfer.getData("text/html"), false, $mouse);
+  var move = dragging && !e[dragCopyModifier];
 
   if (view.someProp("handleDrop", function (f) {
-    return f(view, e, slice || Slice.empty, dragging && dragging.move);
+    return f(view, e, slice || Slice.empty, move);
   })) {
     e.preventDefault();
     return;
@@ -13927,7 +14069,7 @@ editHandlers.drop = function (view, e) {
 
   var tr = view.state.tr;
 
-  if (dragging && dragging.move) {
+  if (move) {
     tr.deleteSelection();
   }
 
@@ -13950,7 +14092,11 @@ editHandlers.drop = function (view, e) {
   if (isNode && NodeSelection.isSelectable(slice.content.firstChild) && $pos.nodeAfter && $pos.nodeAfter.sameMarkup(slice.content.firstChild)) {
     tr.setSelection(new NodeSelection($pos));
   } else {
-    tr.setSelection(selectionBetween(view, $pos, tr.doc.resolve(tr.mapping.map(insertPos))));
+    var end = tr.mapping.map(insertPos);
+    tr.mapping.maps[tr.mapping.maps.length - 1].forEach(function (_from, _to, _newFrom, newTo) {
+      return end = newTo;
+    });
+    tr.setSelection(selectionBetween(view, $pos, tr.doc.resolve(end)));
   }
 
   view.focus();
@@ -14129,8 +14275,11 @@ var Decoration = function Decoration(from, to, type) {
   this.type = type;
 };
 
-var prototypeAccessors$1$5 = {
+var prototypeAccessors$1$6 = {
   spec: {
+    configurable: true
+  },
+  inline: {
     configurable: true
   }
 };
@@ -14238,11 +14387,15 @@ Decoration.node = function node(from, to, attrs, spec) {
 // if you've stored extra information in that object.
 
 
-prototypeAccessors$1$5.spec.get = function () {
+prototypeAccessors$1$6.spec.get = function () {
   return this.type.spec;
 };
 
-Object.defineProperties(Decoration.prototype, prototypeAccessors$1$5); // DecorationAttrs:: interface
+prototypeAccessors$1$6.inline.get = function () {
+  return this.type instanceof InlineType;
+};
+
+Object.defineProperties(Decoration.prototype, prototypeAccessors$1$6); // DecorationAttrs:: interface
 // A set of attributes to add to a decorated node. Most properties
 // simply directly correspond to DOM attributes of the same name,
 // which will be set to the property's value. These are exceptions:
@@ -14682,7 +14835,7 @@ function mapChildren(oldChildren, newLocal, mapping, node, offset, oldOffset, op
   for (var i$1 = 0; i$1 < children.length; i$1 += 3) {
     if (children[i$1 + 1] == -1) {
       // Touched nodes
-      var from = mapping.map(children[i$1] + oldOffset),
+      var from = mapping.map(oldChildren[i$1] + oldOffset),
           fromLocal = from - offset;
 
       if (fromLocal < 0 || fromLocal >= node.content.size) {
@@ -14699,7 +14852,7 @@ function mapChildren(oldChildren, newLocal, mapping, node, offset, oldOffset, op
       var childNode = node.maybeChild(index);
 
       if (childNode && childOffset == fromLocal && childOffset + childNode.nodeSize == toLocal) {
-        var mapped = children[i$1 + 2].mapInner(mapping, childNode, from + 1, children[i$1] + oldOffset + 1, options);
+        var mapped = children[i$1 + 2].mapInner(mapping, childNode, from + 1, oldChildren[i$1] + oldOffset + 1, options);
 
         if (mapped != empty) {
           children[i$1] = fromLocal;
@@ -14943,7 +15096,9 @@ var EditorView = function EditorView(place, props) {
   this.state = props.state;
   this.dispatch = this.dispatch.bind(this);
   this._root = null;
-  this.focused = false; // :: dom.Element
+  this.focused = false; // Kludge used to work around a Chrome bug
+
+  this.trackWrites = null; // :: dom.Element
   // An editable DOM node containing the document. (You probably
   // should not directly interfere with its content.)
 
@@ -15049,7 +15204,15 @@ EditorView.prototype.updateState = function updateState(state) {
 EditorView.prototype.updateStateInner = function updateStateInner(state, reconfigured) {
   var this$1 = this;
   var prev = this.state,
-      redraw = false;
+      redraw = false,
+      updateSel = false; // When stored marks are added, stop composition, so that they can
+  // be displayed.
+
+  if (state.storedMarks && this.composing) {
+    clearComposition(this);
+    updateSel = true;
+  }
+
   this.state = state;
 
   if (reconfigured) {
@@ -15069,7 +15232,11 @@ EditorView.prototype.updateStateInner = function updateStateInner(state, reconfi
       outerDeco = computeDocDeco(this);
   var scroll = reconfigured ? "reset" : state.scrollToSelection > prev.scrollToSelection ? "to selection" : "preserve";
   var updateDoc = redraw || !this.docView.matchesNode(state.doc, outerDeco, innerDeco);
-  var updateSel = updateDoc || !state.selection.eq(prev.selection);
+
+  if (updateDoc || !state.selection.eq(prev.selection)) {
+    updateSel = true;
+  }
+
   var oldScrollPos = scroll == "preserve" && updateSel && this.dom.style.overflowAnchor == null && storeScrollPos(this);
 
   if (updateSel) {
@@ -15082,7 +15249,11 @@ EditorView.prototype.updateStateInner = function updateStateInner(state, reconfi
     var forceSelUpdate = updateDoc && (result.ie || result.chrome) && !this.composing && !prev.selection.empty && !state.selection.empty && selectionContextChanged(prev.selection, state.selection);
 
     if (updateDoc) {
-      var selContext = result.chrome && selectionContext(this.root);
+      // If the node that the selection points into is written to,
+      // Chrome sometimes starts misreporting the selection, so this
+      // tracks that and forces a selection reset when our update
+      // did write to the node.
+      var chromeKludge = result.chrome ? this.trackWrites = this.root.getSelection().focusNode : null;
 
       if (redraw || !this.docView.update(state.doc, outerDeco, innerDeco, this)) {
         this.docView.updateOuterDeco([]);
@@ -15090,7 +15261,7 @@ EditorView.prototype.updateStateInner = function updateStateInner(state, reconfi
         this.docView = docViewDesc(state.doc, outerDeco, innerDeco, this.dom, this);
       }
 
-      if (selContext && needChromeSelectionReset(selContext, this.root)) {
+      if (chromeKludge && !this.trackWrites) {
         forceSelUpdate = true;
       }
     } // Work around for an issue where an update arriving right between
@@ -15121,7 +15292,7 @@ EditorView.prototype.updateStateInner = function updateStateInner(state, reconfi
     else if (state.selection instanceof NodeSelection) {
         scrollRectIntoView(this, this.docView.domAfterPos(state.selection.from).getBoundingClientRect(), startDOM);
       } else {
-        scrollRectIntoView(this, this.coordsAtPos(state.selection.head), startDOM);
+        scrollRectIntoView(this, this.coordsAtPos(state.selection.head, 1), startDOM);
       }
   } else if (oldScrollPos) {
     resetScrollPos(oldScrollPos);
@@ -15242,14 +15413,18 @@ prototypeAccessors$2$1.root.get = function () {
 
 EditorView.prototype.posAtCoords = function posAtCoords$1(coords) {
   return posAtCoords(this, coords);
-}; // :: (number) → {left: number, right: number, top: number, bottom: number}
-// Returns the viewport rectangle at a given document position. `left`
-// and `right` will be the same number, as this returns a flat
-// cursor-ish rectangle.
+}; // :: (number, number) → {left: number, right: number, top: number, bottom: number}
+// Returns the viewport rectangle at a given document position.
+// `left` and `right` will be the same number, as this returns a
+// flat cursor-ish rectangle. If the position is between two things
+// that aren't directly adjacent, `side` determines which element is
+// used. When < 0, the element before the position is used,
+// otherwise the element after.
 
 
-EditorView.prototype.coordsAtPos = function coordsAtPos$1(pos) {
-  return coordsAtPos(this, pos);
+EditorView.prototype.coordsAtPos = function coordsAtPos$1(pos, side) {
+  if (side === void 0) side = 1;
+  return coordsAtPos(this, pos, side);
 }; // :: (number) → {node: dom.Node, offset: number}
 // Find the DOM position that corresponds to the given document
 // position. Note that you should **not** mutate the editor's
@@ -15431,29 +15606,6 @@ function changedNodeViews(a, b) {
   }
 
   return nA != nB;
-}
-
-function selectionContext(root) {
-  var ref = root.getSelection();
-  var offset = ref.focusOffset;
-  var node = ref.focusNode;
-  return node && node.nodeType == 1 ? [node, offset, node.childNodes[offset - 1], node.childNodes[offset]] : null;
-}
-
-function needChromeSelectionReset(context, root) {
-  var newContext = selectionContext(root);
-
-  if (!newContext || newContext[0].nodeType == 3) {
-    return false;
-  }
-
-  for (var i = 0; i < context.length; i++) {
-    if (newContext[i] != context[i]) {
-      return true;
-    }
-  }
-
-  return false;
 } // EditorProps:: interface
 
 var GOOD_LEAF_SIZE = 200; // :: class<T> A rope sequence is a persistent sequence data structure
@@ -16708,7 +16860,7 @@ function splitListItem(itemType) {
       return false;
     }
 
-    if ($from.parent.content.size == 0) {
+    if ($from.parent.content.size == 0 && $from.node(-1).childCount == $from.indexAfter(-1)) {
       // In an empty block. If this is a nested list, the wrapping
       // list item should be split. Otherwise, bail out and let next
       // command handle lifting.
@@ -16958,6 +17110,16 @@ var defaultConfig = {
   code: {
     className: 'fas fa-code',
     inputRule: /^```$/
+  },
+  insertImage: {
+    className: 'fas fa-image',
+    options: {
+      cloudinary: {
+        cloudName: 'pvaklb',
+        uploadPreset: 'cqdpmj8p',
+        googleApiKey: 'AIzaSyBjP3tOONJ4O2-rpYFXAH-lReiP0Qh6qMU'
+      }
+    }
   }
 };
 
@@ -17759,6 +17921,45 @@ for (var key in pcBaseKeymap) {
 
 var mac = typeof navigator != "undefined" ? /Mac/.test(navigator.platform) : typeof os != "undefined" ? os.platform() == "darwin" : false; // :: Object
 
+var injectFileToView = function injectFileToView(view, url) {
+  view.dispatch(view.state.tr.replaceWith(view.state.tr.selection.from, view.state.tr.selection.to, schema$1.nodes.image.create({
+    src: url
+  })));
+};
+var loadScript = function loadScript(src) {
+  return new Promise(function (resolve, reject) {
+    var script = document.createElement('script');
+    script.src = src;
+
+    script.onload = function () {
+      return resolve(script);
+    };
+
+    script.onerror = function () {
+      return reject(new Error("Script load error for ".concat(src)));
+    };
+
+    document.head.append(script);
+  });
+};
+var showUploadWidget = function showUploadWidget(options) {
+  return new Promise(function (resolve, reject) {
+    var uploadWidget = window.cloudinary.createUploadWidget(_objectSpread2({
+      multiple: false,
+      sources: ['local', 'url', 'camera', 'image_search']
+    }, options), function (error, result) {
+      if (error) {
+        throw error;
+      }
+
+      if (result && result.event === 'success') {
+        resolve(result.info.url);
+      }
+    });
+    uploadWidget.open();
+  });
+};
+
 var backspace$1 = chainCommands(deleteSelection, joinBackward, selectNodeBackward);
 var del$1 = chainCommands(deleteSelection, joinForward, selectNodeForward);
 
@@ -17806,6 +18007,29 @@ var createHardBreak = chainCommands(exitCode, function (state, dispatch) {
 
   return true;
 });
+var insertImage = function insertImage(state, dispatch, view, options) {
+  if (dispatch) {
+    if (!navigator.onLine || !options.cloudinary) {
+      console.log('You need to be online to upload file');
+      var url = prompt('Input image URL');
+      injectFileToView(view, url);
+    } else {
+      if (window.cloudinary) {
+        showUploadWidget(options.cloudinary).then(function (url) {
+          return injectFileToView(view, url);
+        });
+      } else {
+        loadScript('https://widget.cloudinary.com/v2.0/global/all.js').then(function () {
+          return showUploadWidget(options.cloudinary);
+        }).then(function (url) {
+          return injectFileToView(view, url);
+        });
+      }
+    }
+  }
+
+  return true;
+};
 var commands = {
   undo: undo,
   redo: redo,
@@ -17841,7 +18065,8 @@ var commands = {
   exit: exitCode,
   backspace: backspace$1,
   delete: del$1,
-  selectAll: selectAll
+  selectAll: selectAll,
+  insertImage: insertImage
 };
 
 var MenuView = /*#__PURE__*/function () {
@@ -17853,7 +18078,8 @@ var MenuView = /*#__PURE__*/function () {
     _defineProperty(this, "createItem", function (_ref) {
       var text = _ref.text,
           className = _ref.className,
-          command = _ref.command;
+          command = _ref.command,
+          options = _ref.options;
       var span = document.createElement('span');
       span.className = 'menuitem ' + className;
       span.title = text || '';
@@ -17863,7 +18089,7 @@ var MenuView = /*#__PURE__*/function () {
 
         _this.editorView.focus();
 
-        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView);
+        command(_this.editorView.state, _this.editorView.dispatch, _this.editorView, options);
       });
 
       var checkActive = function checkActive() {
@@ -17885,13 +18111,15 @@ var MenuView = /*#__PURE__*/function () {
     this.items = items.map(function (_ref2) {
       var command = _ref2.command,
           text = _ref2.text,
-          className = _ref2.className;
+          className = _ref2.className,
+          options = _ref2.options;
 
       if (text || className) {
         return _this.createItem({
           command: command,
           text: text,
-          className: className
+          className: className,
+          options: options
         });
       }
 
@@ -18534,6 +18762,39 @@ function createInputRules(config) {
   });
 }
 
+var placeholderPlugin = new Plugin({
+  state: {
+    init: function init() {
+      return DecorationSet.empty;
+    },
+    apply: function apply(tr, set) {
+      // Adjust decoration positions to changes made by the transaction
+      set = set.map(tr.mapping, tr.doc); // See if the transaction adds or removes any placeholders
+
+      var action = tr.getMeta(this);
+
+      if (action && action.add) {
+        var widget = document.createElement('placeholder');
+        var deco = Decoration.widget(action.add.pos, widget, {
+          id: action.add.id
+        });
+        set = set.add(tr.doc, [deco]);
+      } else if (action && action.remove) {
+        set = set.remove(set.find(null, null, function (spec) {
+          return spec.id === action.remove.id;
+        }));
+      }
+
+      return set;
+    }
+  },
+  props: {
+    decorations: function decorations(state) {
+      return this.getState(state);
+    }
+  }
+});
+
 var SimpleMirror = /*#__PURE__*/function () {
   function SimpleMirror(_ref) {
     var selector = _ref.selector,
@@ -18578,7 +18839,7 @@ var SimpleMirror = /*#__PURE__*/function () {
       node.innerHTML = value;
       var state = EditorState.create({
         doc: DOMParser.fromSchema(schema$1).parse(node),
-        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history()]
+        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history(), placeholderPlugin]
       });
       return state;
     }
