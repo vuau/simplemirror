@@ -17112,14 +17112,7 @@ var defaultConfig = {
     inputRule: /^```$/
   },
   insertImage: {
-    className: 'fas fa-image',
-    options: {
-      cloudinary: {
-        cloudName: 'pvaklb',
-        uploadPreset: 'cqdpmj8p',
-        googleApiKey: 'AIzaSyBjP3tOONJ4O2-rpYFXAH-lReiP0Qh6qMU'
-      }
-    }
+    className: 'fas fa-image'
   }
 };
 
@@ -17945,8 +17938,7 @@ var loadScript = function loadScript(src) {
 var showUploadWidget = function showUploadWidget(options) {
   return new Promise(function (resolve, reject) {
     var uploadWidget = window.cloudinary.createUploadWidget(_objectSpread2({
-      multiple: false,
-      sources: ['local', 'url', 'camera', 'image_search']
+      multiple: false
     }, options), function (error, result) {
       if (error) {
         throw error;
@@ -18009,7 +18001,7 @@ var createHardBreak = chainCommands(exitCode, function (state, dispatch) {
 });
 var insertImage = function insertImage(state, dispatch, view, options) {
   if (dispatch) {
-    if (!navigator.onLine || !options.cloudinary) {
+    if (!navigator.onLine || !options || !options.cloudinary) {
       console.log('You need to be online to upload file');
       var url = prompt('Input image URL');
       injectFileToView(view, url);
@@ -18762,39 +18754,6 @@ function createInputRules(config) {
   });
 }
 
-var placeholderPlugin = new Plugin({
-  state: {
-    init: function init() {
-      return DecorationSet.empty;
-    },
-    apply: function apply(tr, set) {
-      // Adjust decoration positions to changes made by the transaction
-      set = set.map(tr.mapping, tr.doc); // See if the transaction adds or removes any placeholders
-
-      var action = tr.getMeta(this);
-
-      if (action && action.add) {
-        var widget = document.createElement('placeholder');
-        var deco = Decoration.widget(action.add.pos, widget, {
-          id: action.add.id
-        });
-        set = set.add(tr.doc, [deco]);
-      } else if (action && action.remove) {
-        set = set.remove(set.find(null, null, function (spec) {
-          return spec.id === action.remove.id;
-        }));
-      }
-
-      return set;
-    }
-  },
-  props: {
-    decorations: function decorations(state) {
-      return this.getState(state);
-    }
-  }
-});
-
 var SimpleMirror = /*#__PURE__*/function () {
   function SimpleMirror(_ref) {
     var selector = _ref.selector,
@@ -18839,7 +18798,7 @@ var SimpleMirror = /*#__PURE__*/function () {
       node.innerHTML = value;
       var state = EditorState.create({
         doc: DOMParser.fromSchema(schema$1).parse(node),
-        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history(), placeholderPlugin]
+        plugins: [this.menuPlugin, this.keymapPlugin, this.inputRulePlugin, history()]
       });
       return state;
     }

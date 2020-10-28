@@ -8,7 +8,6 @@ import defaultConfig from './defaultConfig'
 import { createMenu } from './menu'
 import { createKeymaps } from './keymaps'
 import { createInputRules } from './inputRules'
-import { placeholderPlugin } from './plugins/placeholder'
 
 import 'prosemirror-view/style/prosemirror.css'
 import './main.css'
@@ -53,8 +52,7 @@ class SimpleMirror {
         this.menuPlugin,
         this.keymapPlugin,
         this.inputRulePlugin,
-        history(),
-        placeholderPlugin
+        history()
       ]
     })
     return state

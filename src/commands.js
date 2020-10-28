@@ -88,7 +88,7 @@ export const createHardBreak = chainCommands(exitCode, (state, dispatch) => {
 
 export const insertImage = (state, dispatch, view, options) => {
   if (dispatch) {
-    if (!navigator.onLine || !options.cloudinary) {
+    if (!navigator.onLine || !options || !options.cloudinary) {
       console.log('You need to be online to upload file')
       const url = prompt('Input image URL')
       injectFileToView(view, url)
