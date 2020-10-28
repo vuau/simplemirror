@@ -9,26 +9,31 @@ class MenuView {
     this.dom.className = 'menubar'
 
     this.items = items
-      .map(({ command, text, className }) => {
+      .map(({ command, text, className, options }) => {
         if (text || className) {
-          return this.createItem({ command, text, className })
+          return this.createItem({ command, text, className, options })
         }
         return null
       })
-      .filter((item) => item)
+      .filter(item => item)
 
     this.update()
   }
 
-  createItem = ({ text, className, command }) => {
+  createItem = ({ text, className, command, options }) => {
     const span = document.createElement('span')
     span.className = 'menuitem ' + className
     span.title = text || ''
     span.textContent = text
-    span.addEventListener('mousedown', (e) => {
+    span.addEventListener('mousedown', e => {
       e.preventDefault()
       this.editorView.focus()
-      command(this.editorView.state, this.editorView.dispatch, this.editorView)
+      command(
+        this.editorView.state,
+        this.editorView.dispatch,
+        this.editorView,
+        options
+      )
     })
     const checkActive = () => {
       const active = command(this.editorView.state)

@@ -19,12 +19,13 @@ import {
   selectAll
 } from 'prosemirror-commands'
 import {
-  splitListItem,
   wrapInList,
   liftListItem,
-  sinkListItem
+  sinkListItem,
+  splitListItem
 } from 'prosemirror-schema-list'
 import { undo, redo } from 'prosemirror-history'
+import { loadScript, showUploadWidget, injectFileToView } from './utils'
 
 const backspace = chainCommands(
   deleteSelection,
@@ -85,6 +86,25 @@ export const createHardBreak = chainCommands(exitCode, (state, dispatch) => {
   return true
 })
 
+export const insertImage = (state, dispatch, view, options) => {
+  if (dispatch) {
+    if (!navigator.onLine || !options.cloudinary) {
+      console.log('You need to be online to upload file')
+      const url = prompt('Input image URL')
+      injectFileToView(view, url)
+    } else {
+      if (window.cloudinary) {
+        showUploadWidget(options.cloudinary).then(url => injectFileToView(view, url))
+      } else {
+        loadScript('https://widget.cloudinary.com/v2.0/global/all.js')
+          .then(() => showUploadWidget(options.cloudinary))
+          .then(url => injectFileToView(view, url))
+      }
+    }
+  }
+  return true
+}
+
 export default {
   undo: undo,
   redo: redo,
@@ -108,5 +128,6 @@ export default {
   exit: exitCode,
   backspace: backspace,
   delete: del,
-  selectAll: selectAll
+  selectAll: selectAll,
+  insertImage: insertImage
 }
