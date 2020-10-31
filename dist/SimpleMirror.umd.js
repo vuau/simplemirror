@@ -17922,6 +17922,7 @@
     view.dispatch(view.state.tr.replaceWith(view.state.tr.selection.from, view.state.tr.selection.to, schema$1.nodes.image.create({
       src: url
     })));
+    view.focus();
   };
   var loadScript = function loadScript(src) {
     return new Promise(function (resolve, reject) {
@@ -18008,7 +18009,12 @@
       if (!navigator.onLine || !options || !options.cloudinary) {
         console.log('You need to be online to upload file');
         var url = prompt('Input image URL');
-        injectFileToView(view, url);
+
+        if (url) {
+          injectFileToView(view, url);
+        } else {
+          view.focus();
+        }
       } else {
         if (window.cloudinary) {
           showUploadWidget(options.cloudinary).then(function (url) {
@@ -18019,6 +18025,8 @@
             return showUploadWidget(options.cloudinary);
           }).then(function (url) {
             return injectFileToView(view, url);
+          }).catch(function () {
+            return view.focus();
           });
         }
       }
@@ -18075,7 +18083,8 @@
         var text = _ref.text,
             className = _ref.className,
             command = _ref.command,
-            options = _ref.options;
+            options = _ref.options,
+            noFocus = _ref.noFocus;
         var span = document.createElement('span');
         span.className = 'menuitem ' + className;
         span.title = text || '';
@@ -18083,7 +18092,9 @@
         span.addEventListener('mousedown', function (e) {
           e.preventDefault();
 
-          _this.editorView.focus();
+          if (!noFocus) {
+            _this.editorView.focus();
+          }
 
           command(_this.editorView.state, _this.editorView.dispatch, _this.editorView, options);
         });
@@ -18155,9 +18166,11 @@
               value = _Object$entries$_i[1];
 
           if (commands[key]) {
-            items.push(_objectSpread2({
+            items.push(_objectSpread2(_objectSpread2({
               command: commands[key]
-            }, value));
+            }, key === 'insertImage' && {
+              noFocus: true
+            }), value));
           }
         }
 
