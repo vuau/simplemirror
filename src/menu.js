@@ -20,14 +20,16 @@ class MenuView {
     this.update()
   }
 
-  createItem = ({ text, className, command, options }) => {
+  createItem = ({ text, className, command, options, noFocus }) => {
     const span = document.createElement('span')
     span.className = 'menuitem ' + className
     span.title = text || ''
     span.textContent = text
     span.addEventListener('mousedown', e => {
       e.preventDefault()
-      this.editorView.focus()
+      if (!noFocus) {
+        this.editorView.focus()
+      }
       command(
         this.editorView.state,
         this.editorView.dispatch,
@@ -65,6 +67,9 @@ export function createMenu (config) {
         if (commands[key]) {
           items.push({
             command: commands[key],
+            ...(key === 'insertImage' && {
+              noFocus: true
+            }),
             ...value
           })
         }

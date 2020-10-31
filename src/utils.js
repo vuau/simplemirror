@@ -19,6 +19,7 @@ export const injectFileToView = (view, url) => {
       schema.nodes.image.create({ src: url })
     )
   )
+  view.focus()
 }
 
 export const loadScript = src => {

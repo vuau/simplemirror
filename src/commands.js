@@ -91,7 +91,11 @@ export const insertImage = (state, dispatch, view, options) => {
     if (!navigator.onLine || !options || !options.cloudinary) {
       console.log('You need to be online to upload file')
       const url = prompt('Input image URL')
-      injectFileToView(view, url)
+      if (url) {
+        injectFileToView(view, url)
+      } else {
+        view.focus()
+      }
     } else {
       if (window.cloudinary) {
         showUploadWidget(options.cloudinary).then(url => injectFileToView(view, url))
@@ -99,6 +103,7 @@ export const insertImage = (state, dispatch, view, options) => {
         loadScript('https://widget.cloudinary.com/v2.0/global/all.js')
           .then(() => showUploadWidget(options.cloudinary))
           .then(url => injectFileToView(view, url))
+          .catch(() => view.focus())
       }
     }
   }
