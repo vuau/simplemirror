@@ -18111,19 +18111,9 @@ var MenuView = /*#__PURE__*/function () {
     this.editorView = editorView;
     this.dom = document.createElement('div');
     this.dom.className = 'menubar';
-    this.items = items.map(function (_ref2) {
-      var command = _ref2.command,
-          text = _ref2.text,
-          className = _ref2.className,
-          options = _ref2.options;
-
-      if (text || className) {
-        return _this.createItem({
-          command: command,
-          text: text,
-          className: className,
-          options: options
-        });
+    this.items = items.map(function (item) {
+      if (item.text || item.className) {
+        return _this.createItem(item);
       }
 
       return null;
@@ -18136,8 +18126,8 @@ var MenuView = /*#__PURE__*/function () {
   _createClass(MenuView, [{
     key: "update",
     value: function update() {
-      this.items.forEach(function (_ref3) {
-        var checkActive = _ref3.checkActive;
+      this.items.forEach(function (_ref2) {
+        var checkActive = _ref2.checkActive;
         checkActive();
       });
     }

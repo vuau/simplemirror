@@ -9,9 +9,9 @@ class MenuView {
     this.dom.className = 'menubar'
 
     this.items = items
-      .map(({ command, text, className, options }) => {
-        if (text || className) {
-          return this.createItem({ command, text, className, options })
+      .map((item) => {
+        if (item.text || item.className) {
+          return this.createItem(item)
         }
         return null
       })
