@@ -1,4 +1,5 @@
 import {
+  InputRule,
   inputRules,
   wrappingInputRule,
   textblockTypeInputRule,
@@ -8,6 +9,25 @@ import {
 } from 'prosemirror-inputrules'
 
 import schema from './schema'
+
+// Taken from: https://discuss.prosemirror.net/t/input-rules-for-wrapping-marks/537/10
+// Usage: markInputRule(/_(\S(?:|.*?\S))_$/, schema.marks.em) then we can type _text_ to have <em>text</em> for example
+function markInputRule (regexp, markType, getAttrs) {
+  return new InputRule(regexp, (state, match, start, end) => {
+    const attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs
+    const tr = state.tr
+    if (match[1]) {
+      const textStart = start + match[0].indexOf(match[1])
+      const textEnd = textStart + match[1].length
+      if (textEnd < end) tr.delete(textEnd, end)
+      if (textStart > start) tr.delete(start, textStart)
+      end = start + match[1].length
+    }
+    tr.addMark(start, end, markType.create(attrs))
+    tr.removeStoredMark(markType) // Do not continue with mark.
+    return tr
+  })
+}
 
 // Given a blockquote node type, returns an input rule that turns `"> "`
 // at the start of a textblock into a blockquote.
@@ -20,7 +40,7 @@ export const orderedListRule = rule =>
   wrappingInputRule(
     rule,
     schema.nodes.ordered_list,
-    (match) => ({ order: +match[1] }),
+    match => ({ order: +match[1] }),
     (match, node) => node.childCount + node.attrs.order === +match[1]
   )
 
@@ -32,8 +52,10 @@ export const unorderedListRule = rule =>
 
 // Given a code block node type, returns an input rule that turns a
 // textblock starting with three backticks into a code block.
-export const codeRule = rule =>
+export const codeBlockRule = rule =>
   textblockTypeInputRule(rule, schema.nodes.code_block)
+
+export const codeRule = rule => markInputRule(rule, schema.marks.code)
 
 // Given a node type and a maximum level, creates an input rule that
 // turns up to that number of `#` characters followed by a space at
@@ -52,6 +74,7 @@ const supportRules = {
   quote: quoteRule,
   orderedList: orderedListRule,
   unorderedList: unorderedListRule,
+  codeBlock: codeBlockRule,
   code: codeRule,
   h1: h1Rule,
   h2: h2Rule,

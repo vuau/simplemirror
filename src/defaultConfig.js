@@ -59,9 +59,12 @@ export default {
     className: 'fas fa-quote-left',
     inputRule: /^\s*>\s$/
   },
-  code: {
+  codeBlock: {
     className: 'fas fa-code',
     inputRule: /^```$/
+  },
+  code: {
+    inputRule: /`(\S(?:|.*?\S))`$/
   },
   insertImage: {
     className: 'fas fa-image'
