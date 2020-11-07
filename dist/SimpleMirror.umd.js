@@ -17111,9 +17111,12 @@
       className: 'fas fa-quote-left',
       inputRule: /^\s*>\s$/
     },
-    code: {
+    codeBlock: {
       className: 'fas fa-code',
       inputRule: /^```$/
+    },
+    code: {
+      inputRule: /`(\S(?:|.*?\S))`$/
     },
     insertImage: {
       className: 'fas fa-image'
@@ -18674,7 +18677,29 @@
     });
   }
 
+  // Usage: markInputRule(/_(\S(?:|.*?\S))_$/, schema.marks.em) then we can type _text_ to have <em>text</em> for example
+
+  function markInputRule(regexp, markType, getAttrs) {
+    return new InputRule(regexp, function (state, match, start, end) {
+      var attrs = getAttrs instanceof Function ? getAttrs(match) : getAttrs;
+      var tr = state.tr;
+
+      if (match[1]) {
+        var textStart = start + match[0].indexOf(match[1]);
+        var textEnd = textStart + match[1].length;
+        if (textEnd < end) tr.delete(textEnd, end);
+        if (textStart > start) tr.delete(start, textStart);
+        end = start + match[1].length;
+      }
+
+      tr.addMark(start, end, markType.create(attrs));
+      tr.removeStoredMark(markType); // Do not continue with mark.
+
+      return tr;
+    });
+  } // Given a blockquote node type, returns an input rule that turns `"> "`
   // at the start of a textblock into a blockquote.
+
 
   var quoteRule = function quoteRule(rule) {
     return wrappingInputRule(rule, schema$1.nodes.blockquote);
@@ -18698,8 +18723,11 @@
   }; // Given a code block node type, returns an input rule that turns a
   // textblock starting with three backticks into a code block.
 
-  var codeRule = function codeRule(rule) {
+  var codeBlockRule = function codeBlockRule(rule) {
     return textblockTypeInputRule(rule, schema$1.nodes.code_block);
+  };
+  var codeRule = function codeRule(rule) {
+    return markInputRule(rule, schema$1.marks.code);
   }; // Given a node type and a maximum level, creates an input rule that
   // turns up to that number of `#` characters followed by a space at
   // the start of a textblock into a heading whose level corresponds to
@@ -18737,6 +18765,7 @@
     quote: quoteRule,
     orderedList: orderedListRule,
     unorderedList: unorderedListRule,
+    codeBlock: codeBlockRule,
     code: codeRule,
     h1: h1Rule,
     h2: h2Rule,
