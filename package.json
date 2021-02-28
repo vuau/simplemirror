@@ -1,5 +1,5 @@
 {
-  "name": "simplemirror",
+  "name": "@vuau/simplemirror",
   "version": "1.0.17",
   "description": "A simple and easy to use WYSIWYWG editor based on ProseMirror",
   "repository": {
